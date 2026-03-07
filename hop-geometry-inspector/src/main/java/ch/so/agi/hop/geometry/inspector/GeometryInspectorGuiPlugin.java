@@ -8,11 +8,10 @@ import ch.so.agi.hop.geometry.inspector.model.SamplingResult;
 import ch.so.agi.hop.geometry.inspector.sampling.GeometrySamplerService;
 import ch.so.agi.hop.geometry.inspector.ui.GeometryInspectorFallbackDialog;
 import ch.so.agi.hop.geometry.inspector.ui.GeometryInspectorOptionsDialog;
-import ch.so.agi.hop.geometry.inspector.ui.GeometryInspectorViewerFrame;
+import ch.so.agi.hop.geometry.inspector.ui.GeometryInspectorSwtViewer;
 import java.util.List;
 import java.util.concurrent.ThreadFactory;
 import java.util.stream.Collectors;
-import javax.swing.SwingUtilities;
 import org.apache.hop.core.action.GuiContextAction;
 import org.apache.hop.core.action.GuiContextActionFilter;
 import org.apache.hop.core.gui.plugin.GuiPlugin;
@@ -164,31 +163,33 @@ public class GeometryInspectorGuiPlugin {
 
       SamplingResult finalSamplingResult = samplingResult;
       GeometryBuildResult finalBuildResult = buildResult;
-      SwingUtilities.invokeLater(
-          () -> {
-            try {
-              GeometryInspectorViewerFrame frame =
-                  new GeometryInspectorViewerFrame(
-                      finalSamplingResult,
-                      geometryFeatureBuilder,
-                      geometryFields,
-                      options.geometryField(),
-                      finalBuildResult,
-                      backgroundMapConfig);
-              frame.setVisible(true);
-            } catch (Throwable throwable) {
-              Display.getDefault()
-                  .asyncExec(
-                      () ->
-                          GeometryInspectorFallbackDialog.showError(
-                              HopGui.getInstance().getShell(),
-                              "Geometry inspector fallback",
-                              "Swing viewer initialization failed. Showing summary fallback.",
-                              throwable,
-                              finalSamplingResult,
-                              finalBuildResult));
-            }
-          });
+      Display.getDefault()
+          .asyncExec(
+              () -> {
+                try {
+                  GeometryInspectorSwtViewer viewer =
+                      new GeometryInspectorSwtViewer(
+                          HopGui.getInstance().getShell(),
+                          finalSamplingResult,
+                          geometryFeatureBuilder,
+                          geometryFields,
+                          options.geometryField(),
+                          finalBuildResult,
+                          backgroundMapConfig);
+                  viewer.open();
+                } catch (Throwable throwable) {
+                  Display.getDefault()
+                      .asyncExec(
+                          () ->
+                              GeometryInspectorFallbackDialog.showError(
+                                  HopGui.getInstance().getShell(),
+                                  "Geometry inspector fallback",
+                                  "SWT viewer initialization failed. Showing summary fallback.",
+                                  throwable,
+                                  finalSamplingResult,
+                                  finalBuildResult));
+                }
+              });
 
     } catch (Exception e) {
       SamplingResult finalSamplingResult =
