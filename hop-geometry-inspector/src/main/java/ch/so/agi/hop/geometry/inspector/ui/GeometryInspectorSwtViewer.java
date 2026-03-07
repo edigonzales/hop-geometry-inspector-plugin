@@ -61,6 +61,9 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
   private static final long OVERLAY_DEBOUNCE_MILLIS = 40L;
   private static final long BACKGROUND_DEBOUNCE_MILLIS = 220L;
   private static final int BACKGROUND_CACHE_SIZE = 8;
+  private static final float POINT_FILL_OPACITY = 1.0f;
+  private static final float POINT_SIZE = 11.0f;
+  private static final float HIGHLIGHT_POINT_SIZE = 15.0f;
 
   private enum ViewportRefreshMode {
     PREVIEW_ONLY,
@@ -387,6 +390,12 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
     return Math.max(100, shell.getMonitor() == null ? 100 : shell.getMonitor().getZoom());
   }
 
+  private int currentOutputDpi() {
+    Point dpi = shell.getDisplay().getDPI();
+    double baseDpi = (Math.max(0, dpi.x) + Math.max(0, dpi.y)) / 2.0d;
+    return Math.max(1, (int) Math.round(baseDpi * (currentDeviceZoom() / 100.0d)));
+  }
+
   private GeometryInspectorViewTransform currentViewTransform() {
     return GeometryInspectorViewportMath.createViewTransform(
         viewportModel.displayArea(), viewportModel.canvasWidth(), viewportModel.canvasHeight());
@@ -401,7 +410,8 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
       return false;
     }
     Point size = mapCanvas.getSize();
-    return viewportModel.updateCanvasMetrics(size.x, size.y, currentDeviceZoom());
+    return viewportModel.updateCanvasMetrics(
+        size.x, size.y, currentDeviceZoom(), currentOutputDpi());
   }
 
   private void refreshForSelectedField(boolean resetBackgroundInitialization) {
@@ -586,6 +596,7 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
             viewportModel.canvasWidth(),
             viewportModel.canvasHeight(),
             viewportModel.deviceZoom(),
+            viewportModel.outputDpi(),
             currentBuildResult == null ? null : currentBuildResult.detectedSrid());
     GeometryInspectorFrameKey cacheKey =
         GeometryInspectorFrameKey.forBackground(
@@ -594,6 +605,7 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
             requestParameters.pixelWidth(),
             requestParameters.pixelHeight(),
             viewportModel.deviceZoom(),
+            requestParameters.outputDpi(),
             currentBuildResult == null ? null : currentBuildResult.detectedSrid(),
             true);
     GeometryInspectorFrame cachedFrame = backgroundFrameCache.get(cacheKey);
@@ -622,6 +634,7 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
     int logicalWidth = viewportModel.canvasWidth();
     int logicalHeight = viewportModel.canvasHeight();
     int deviceZoom = viewportModel.deviceZoom();
+    int outputDpi = viewportModel.outputDpi();
     Integer srid = currentBuildResult.detectedSrid();
 
     backgroundStatus = immediate ? "loading" : "stale";
@@ -632,7 +645,7 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
           immediate ? 0L : BACKGROUND_DEBOUNCE_MILLIS,
           revision ->
               backgroundMapClient.render(
-                  areaSnapshot, logicalWidth, logicalHeight, deviceZoom, srid, revision),
+                  areaSnapshot, logicalWidth, logicalHeight, deviceZoom, outputDpi, srid, revision),
         (revision, rasterData) -> {
           if (shell.isDisposed()) {
             return;
@@ -769,8 +782,9 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
     targetMapContent.addLayer(layer);
   }
 
-  private Style createPointStyle() {
-    return SLD.createPointStyle("circle", new Color(215, 48, 39), Color.BLACK, 1.1f, 11.0f);
+  static Style createPointStyle() {
+    return SLD.createPointStyle(
+        "circle", new Color(215, 48, 39), Color.BLACK, POINT_FILL_OPACITY, POINT_SIZE);
   }
 
   private Style createLineStyle() {
@@ -781,10 +795,14 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
     return SLD.createPolygonStyle(new Color(253, 174, 97), new Color(49, 54, 149), 0.48f);
   }
 
-  private Style createHighlightStyle(Geometry geometry) {
+  static Style createHighlightStyle(Geometry geometry) {
     if (geometry instanceof Puntal) {
       return SLD.createPointStyle(
-          "circle", new Color(35, 35, 35), new Color(255, 230, 65), 2.2f, 15.0f);
+          "circle",
+          new Color(35, 35, 35),
+          new Color(255, 230, 65),
+          POINT_FILL_OPACITY,
+          HIGHLIGHT_POINT_SIZE);
     }
     if (geometry instanceof Lineal) {
       return SLD.createLineStyle(new Color(255, 230, 65), 4.0f);

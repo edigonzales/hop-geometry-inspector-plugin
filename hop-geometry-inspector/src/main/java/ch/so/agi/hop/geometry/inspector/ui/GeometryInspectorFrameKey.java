@@ -11,6 +11,7 @@ record GeometryInspectorFrameKey(
     int pixelWidth,
     int pixelHeight,
     int deviceZoom,
+    int outputDpi,
     Integer srid,
     String serviceUrl,
     String layerNames,
@@ -28,6 +29,7 @@ record GeometryInspectorFrameKey(
       int pixelWidth,
       int pixelHeight,
       int deviceZoom,
+      int outputDpi,
       Integer srid,
       boolean enabled) {
     ReferencedEnvelope normalized = displayArea == null ? null : new ReferencedEnvelope(displayArea);
@@ -39,6 +41,7 @@ record GeometryInspectorFrameKey(
         pixelWidth,
         pixelHeight,
         deviceZoom,
+        outputDpi,
         srid,
         config == null ? "" : config.serviceUrl(),
         config == null ? "" : String.join(",", config.parsedLayerNames()),

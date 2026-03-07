@@ -131,9 +131,40 @@ Run tests:
 mvn test
 ```
 
+## CRS behavior
+
+The geometry inspector does not reproject geometries.
+
+- Parsed geometries are rendered with their original numeric coordinates.
+- The plugin inspects the sampled geometries for positive SRIDs (`geometry.getSRID() > 0`).
+- A usable CRS is only established when all renderable sampled geometries share exactly one positive SRID and GeoTools can decode it as `EPSG:<srid>`.
+- In that case, the sample feature type and sample extent are tagged with that decoded CRS.
+- If sampled geometries have no SRID, mixed SRIDs, or an SRID that cannot be decoded, the inspector still renders the geometry overlay, but it has no usable common CRS.
+
+Practical consequences:
+
+- Overlay rendering:
+  - Uses the coordinates of the displayed geometries as-is.
+  - No transformation between per-row SRIDs and a target map CRS is performed.
+  - Mixed CRS samples can therefore render in inconsistent positions relative to each other.
+- Selection details:
+  - If the selected geometry has its own positive SRID, the UI shows that as `EPSG:<srid>`.
+  - Otherwise the UI falls back to the detected sample CRS status or `No SRID`.
+- WMS background:
+  - The background map is only enabled when the sample has a consistent, decodable CRS.
+  - The WMS `GetMap` request then uses exactly that detected SRID as `EPSG:<srid>`.
+  - No separate reprojection step is performed before requesting the WMS.
+  - If the sample has no usable common CRS, the WMS background stays unavailable.
+
+In short:
+
+- The inspector does not always use the CRS of the currently displayed single geometry.
+- For the WMS, it uses the one common CRS detected for the whole sampled result set.
+- If there is no single consistent CRS across the sample, no WMS request is sent.
+
 ## Troubleshooting
 
-### Swing/GeoTools viewer does not open
+### Viewer does not open
 
 The plugin falls back to an SWT summary/error dialog instead of failing hard.
 

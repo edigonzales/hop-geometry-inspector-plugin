@@ -8,6 +8,7 @@ final class GeometryInspectorViewportModel {
   private int canvasWidth;
   private int canvasHeight;
   private int deviceZoom = 100;
+  private int outputDpi = 1;
   private boolean dragging;
   private boolean dragMoved;
   private int dragStartX;
@@ -34,19 +35,26 @@ final class GeometryInspectorViewportModel {
     return deviceZoom;
   }
 
-  boolean updateCanvasMetrics(int canvasWidth, int canvasHeight, int deviceZoom) {
+  int outputDpi() {
+    return outputDpi;
+  }
+
+  boolean updateCanvasMetrics(int canvasWidth, int canvasHeight, int deviceZoom, int outputDpi) {
     int normalizedWidth = Math.max(0, canvasWidth);
     int normalizedHeight = Math.max(0, canvasHeight);
     int normalizedZoom = Math.max(100, deviceZoom);
+    int normalizedDpi = Math.max(1, outputDpi);
 
     boolean changed =
         this.canvasWidth != normalizedWidth
             || this.canvasHeight != normalizedHeight
-            || this.deviceZoom != normalizedZoom;
+            || this.deviceZoom != normalizedZoom
+            || this.outputDpi != normalizedDpi;
 
     this.canvasWidth = normalizedWidth;
     this.canvasHeight = normalizedHeight;
     this.deviceZoom = normalizedZoom;
+    this.outputDpi = normalizedDpi;
     return changed;
   }
 

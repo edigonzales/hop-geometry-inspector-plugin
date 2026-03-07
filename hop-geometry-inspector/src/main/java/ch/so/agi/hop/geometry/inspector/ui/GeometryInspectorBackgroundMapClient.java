@@ -77,6 +77,7 @@ final class GeometryInspectorBackgroundMapClient {
       int logicalWidth,
       int logicalHeight,
       int deviceZoom,
+      int outputDpi,
       Integer srid) {
     ReferencedEnvelope renderArea =
         GeometryInspectorViewportMath.fitToCanvasAspect(displayArea, logicalWidth, logicalHeight);
@@ -88,6 +89,7 @@ final class GeometryInspectorBackgroundMapClient {
         logicalHeight,
         pixelWidth,
         pixelHeight,
+        Math.max(1, outputDpi),
         srid == null ? "" : "EPSG:" + srid,
         config.parsedLayerNames(),
         config.styleName(),
@@ -101,6 +103,7 @@ final class GeometryInspectorBackgroundMapClient {
       int logicalWidth,
       int logicalHeight,
       int deviceZoom,
+      int outputDpi,
       Integer srid,
       long revision)
       throws Exception {
@@ -108,7 +111,7 @@ final class GeometryInspectorBackgroundMapClient {
       throw new IllegalStateException("Background map is not configured");
     }
     RequestParameters parameters =
-        buildRequestParameters(displayArea, logicalWidth, logicalHeight, deviceZoom, srid);
+        buildRequestParameters(displayArea, logicalWidth, logicalHeight, deviceZoom, outputDpi, srid);
     if (parameters.displayArea() == null || parameters.srsCode().isBlank()) {
       throw new IllegalStateException("Background map requires a renderable extent and EPSG code");
     }
@@ -145,6 +148,13 @@ final class GeometryInspectorBackgroundMapClient {
     request.setDimensions(parameters.pixelWidth(), parameters.pixelHeight());
     request.setBBox(parameters.displayArea());
     request.setSRS(parameters.srsCode());
+    if (parameters.outputDpi() > 0) {
+      request.setVendorSpecificParameter("DPI", Integer.toString(parameters.outputDpi()));
+      request.setVendorSpecificParameter(
+          "MAP_RESOLUTION", Integer.toString(parameters.outputDpi()));
+      request.setVendorSpecificParameter(
+          "FORMAT_OPTIONS", "dpi:" + parameters.outputDpi());
+    }
 
     for (org.geotools.ows.wms.Layer layer : layers) {
       if (parameters.styleName().isBlank()) {
@@ -218,6 +228,7 @@ final class GeometryInspectorBackgroundMapClient {
       int logicalHeight,
       int pixelWidth,
       int pixelHeight,
+      int outputDpi,
       String srsCode,
       List<String> layerNames,
       String styleName,

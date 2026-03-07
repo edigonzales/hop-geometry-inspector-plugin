@@ -8,7 +8,9 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.geotools.api.geometry.Bounds;
@@ -42,6 +44,7 @@ class GeometryInspectorBackgroundMapClientTest {
             400,
             200,
             200,
+            192,
             2056);
 
     assertThat(capabilitiesUrl)
@@ -51,6 +54,7 @@ class GeometryInspectorBackgroundMapClientTest {
     assertThat(parameters.logicalHeight()).isEqualTo(200);
     assertThat(parameters.pixelWidth()).isEqualTo(800);
     assertThat(parameters.pixelHeight()).isEqualTo(400);
+    assertThat(parameters.outputDpi()).isEqualTo(192);
     assertThat(parameters.srsCode()).isEqualTo("EPSG:2056");
     assertThat(parameters.layerNames()).containsExactly("base", "overlay");
     assertThat(parameters.styleName()).isEqualTo("bright");
@@ -71,7 +75,7 @@ class GeometryInspectorBackgroundMapClientTest {
 
     GeometryInspectorBackgroundMapClient.RequestParameters parameters =
         client.buildRequestParameters(
-            new ReferencedEnvelope(0.0d, 100.0d, 0.0d, 50.0d, null), 300, 300, 100, 2056);
+            new ReferencedEnvelope(0.0d, 100.0d, 0.0d, 50.0d, null), 300, 300, 100, 96, 2056);
 
     assertThat(parameters.displayArea().getWidth()).isEqualTo(100.0d);
     assertThat(parameters.displayArea().getHeight()).isEqualTo(100.0d);
@@ -95,7 +99,7 @@ class GeometryInspectorBackgroundMapClientTest {
                 true));
     GeometryInspectorBackgroundMapClient.RequestParameters parameters =
         client.buildRequestParameters(
-            new ReferencedEnvelope(0.0d, 10.0d, 0.0d, 5.0d, null), 200, 100, 100, 4326);
+            new ReferencedEnvelope(0.0d, 10.0d, 0.0d, 5.0d, null), 200, 100, 100, 144, 4326);
     RecordingGetMapRequest request = new RecordingGetMapRequest();
     Layer base = new Layer();
     base.setName("base");
@@ -113,6 +117,10 @@ class GeometryInspectorBackgroundMapClientTest {
     assertThat(request.bounds).isEqualTo(parameters.displayArea());
     assertThat(request.layerNames).containsExactly("base", "overlay");
     assertThat(request.styles).containsExactly("bright", "bright");
+    assertThat(request.vendorSpecificParameters)
+        .containsEntry("DPI", "144")
+        .containsEntry("MAP_RESOLUTION", "144")
+        .containsEntry("FORMAT_OPTIONS", "dpi:144");
   }
 
   @Test
@@ -135,7 +143,13 @@ class GeometryInspectorBackgroundMapClientTest {
 
     assertThatThrownBy(
             () -> client.render(
-                new ReferencedEnvelope(0.0d, 100.0d, 0.0d, 50.0d, null), 300, 300, 100, 2056, 1L))
+                new ReferencedEnvelope(0.0d, 100.0d, 0.0d, 50.0d, null),
+                300,
+                300,
+                100,
+                96,
+                2056,
+                1L))
         .isInstanceOf(IllegalStateException.class)
         .hasMessageContaining("WMS initialization failed");
     assertThat(client.initializationState())
@@ -144,7 +158,13 @@ class GeometryInspectorBackgroundMapClientTest {
 
     assertThatThrownBy(
             () -> client.render(
-                new ReferencedEnvelope(0.0d, 100.0d, 0.0d, 50.0d, null), 300, 300, 100, 2056, 2L))
+                new ReferencedEnvelope(0.0d, 100.0d, 0.0d, 50.0d, null),
+                300,
+                300,
+                100,
+                96,
+                2056,
+                2L))
         .isInstanceOf(IllegalStateException.class)
         .hasMessageContaining("WMS initialization failed");
     assertThat(attempts).hasValue(1);
@@ -165,6 +185,7 @@ class GeometryInspectorBackgroundMapClientTest {
     private String srs;
     private final List<String> layerNames = new ArrayList<>();
     private final List<String> styles = new ArrayList<>();
+    private final Map<String, String> vendorSpecificParameters = new LinkedHashMap<>();
 
     @Override
     public void setVersion(String version) {
@@ -255,7 +276,9 @@ class GeometryInspectorBackgroundMapClientTest {
     public void setSampleDimensionValue(String dimensionName, String value) {}
 
     @Override
-    public void setVendorSpecificParameter(String name, String value) {}
+    public void setVendorSpecificParameter(String name, String value) {
+      vendorSpecificParameters.put(name, value);
+    }
 
     @Override
     public void setProperties(Properties properties) {

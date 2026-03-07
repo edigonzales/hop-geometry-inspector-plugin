@@ -17,9 +17,10 @@ class GeometryInspectorFrameKeyTest {
         new ReferencedEnvelope(0.0d, 100.0d, 0.0d, 50.0d, null);
 
     GeometryInspectorFrameKey first =
-        GeometryInspectorFrameKey.forBackground(config, displayArea, 300, 150, 100, 2056, true);
+        GeometryInspectorFrameKey.forBackground(config, displayArea, 300, 150, 100, 96, 2056, true);
     GeometryInspectorFrameKey second =
-        GeometryInspectorFrameKey.forBackground(config, displayArea, 600, 300, 200, 2056, true);
+        GeometryInspectorFrameKey.forBackground(
+            config, displayArea, 600, 300, 200, 192, 2056, true);
 
     assertThat(first.minX()).isEqualTo(second.minX());
     assertThat(first.maxX()).isEqualTo(second.maxX());
@@ -27,5 +28,6 @@ class GeometryInspectorFrameKeyTest {
     assertThat(first.maxY()).isEqualTo(second.maxY());
     assertThat(first.pixelWidth()).isNotEqualTo(second.pixelWidth());
     assertThat(first.deviceZoom()).isNotEqualTo(second.deviceZoom());
+    assertThat(first.outputDpi()).isNotEqualTo(second.outputDpi());
   }
 }
