@@ -4,15 +4,14 @@ import ch.so.agi.hop.geometry.inspector.model.GeometryBuildResult;
 import ch.so.agi.hop.geometry.inspector.model.GeometryFieldCandidate;
 import ch.so.agi.hop.geometry.inspector.model.GeometryInspectorBackgroundMapConfig;
 import ch.so.agi.hop.geometry.inspector.model.GeometryInspectorOptions;
+import ch.so.agi.hop.geometry.inspector.model.GeometryInspectionSide;
 import ch.so.agi.hop.geometry.inspector.model.SamplingResult;
 import ch.so.agi.hop.geometry.inspector.sampling.GeometrySamplerService;
 import ch.so.agi.hop.geometry.inspector.ui.GeometryInspectorFallbackDialog;
 import ch.so.agi.hop.geometry.inspector.ui.GeometryInspectorOptionsDialog;
-import ch.so.agi.hop.geometry.inspector.ui.GeometryInspectorViewerFrame;
+import ch.so.agi.hop.geometry.inspector.ui.GeometryInspectorSwtViewer;
 import java.util.List;
 import java.util.concurrent.ThreadFactory;
-import java.util.stream.Collectors;
-import javax.swing.SwingUtilities;
 import org.apache.hop.core.action.GuiContextAction;
 import org.apache.hop.core.action.GuiContextActionFilter;
 import org.apache.hop.core.gui.plugin.GuiPlugin;
@@ -42,30 +41,24 @@ public class GeometryInspectorGuiPlugin {
       parentId = HopGuiPipelineTransformContext.CONTEXT_ID,
       type = GuiActionType.Info,
       name = "Inspect geometries...",
-      tooltip = "Open a visual inspector for sampled transform output geometries",
+      tooltip = "Open a visual inspector for sampled transform geometries",
       image = "ui/images/preview.svg",
       category = "Preview",
       categoryOrder = "3")
   public void inspectGeometries(HopGuiPipelineTransformContext context) {
     try {
-      IRowMeta outputRowMeta =
-          context
-              .getPipelineMeta()
-              .getTransformFields(context.getPipelineGraph().getVariables(), context.getTransformMeta());
-
-      List<GeometryFieldCandidate> candidates = geometryFieldDetector.detectCandidates(outputRowMeta);
-      if (candidates.isEmpty()) {
-        showInfo("No geometry field candidates", "No geometry-compatible field was detected in the selected transform output.");
+      List<GeometryFieldCandidate> outputCandidates = detectOutputCandidates(context);
+      List<GeometryFieldCandidate> inputCandidates = detectInputCandidates(context);
+      if (outputCandidates.isEmpty() && inputCandidates.isEmpty()) {
+        showInfo(
+            "No geometry field candidates",
+            "No geometry-compatible field was detected on the selected transform input or output.");
         return;
       }
 
-      List<String> geometryFields =
-          candidates.stream().map(GeometryFieldCandidate::fieldName).collect(Collectors.toList());
-
-      String defaultField = geometryFieldDetector.chooseDefaultField(candidates);
       GeometryInspectorOptionsDialog dialog =
           new GeometryInspectorOptionsDialog(
-              HopGui.getInstance().getShell(), geometryFields, defaultField, settingsService);
+              HopGui.getInstance().getShell(), outputCandidates, inputCandidates, settingsService);
       GeometryInspectorOptions options = dialog.open();
       if (options == null) {
         return;
@@ -81,7 +74,7 @@ public class GeometryInspectorGuiPlugin {
               () -> {
                 try {
                   GeometryInspectorClassLoaderSupport.withPluginContextClassLoader(
-                      () -> runInspection(context, options, geometryFields, backgroundMapConfig));
+                      () -> runInspection(context, options, backgroundMapConfig));
                 } catch (RuntimeException e) {
                   throw e;
                 } catch (Exception e) {
@@ -109,11 +102,7 @@ public class GeometryInspectorGuiPlugin {
     }
 
     try {
-      IRowMeta outputRowMeta =
-          context
-              .getPipelineMeta()
-              .getTransformFields(context.getPipelineGraph().getVariables(), context.getTransformMeta());
-      return !geometryFieldDetector.detectCandidates(outputRowMeta).isEmpty();
+      return !detectOutputCandidates(context).isEmpty() || !detectInputCandidates(context).isEmpty();
     } catch (Exception e) {
       return false;
     }
@@ -122,7 +111,6 @@ public class GeometryInspectorGuiPlugin {
   private void runInspection(
       HopGuiPipelineTransformContext context,
       GeometryInspectorOptions options,
-      List<String> geometryFields,
       GeometryInspectorBackgroundMapConfig backgroundMapConfig) {
     SamplingResult samplingResult = null;
     GeometryBuildResult buildResult = null;
@@ -137,16 +125,38 @@ public class GeometryInspectorGuiPlugin {
                 () ->
                     GeometryInspectorFallbackDialog.showSummary(
                         HopGui.getInstance().getShell(),
-                        "Geometry inspector",
+                        "No sampled rows observed",
                         finalSamplingResult,
                         new GeometryBuildResult(
                             List.of(), null, null, 0, 0, List.of(), null, null, false, "")));
         return;
       }
 
+      GeometryInspectionFieldSelection fieldSelection =
+          new GeometryInspectionFieldSelector()
+              .resolve(samplingResult.rowMeta(), options.geometryField());
+      if (fieldSelection.selectedField() == null || fieldSelection.selectedField().isBlank()) {
+        SamplingResult finalSamplingResult =
+            samplingResult.appendSideResolutionMessage(
+                "No geometry field candidates were detected on the inspected side.");
+        Display.getDefault()
+            .asyncExec(
+                () ->
+                    GeometryInspectorFallbackDialog.showSummary(
+                        HopGui.getInstance().getShell(),
+                        "No geometry field candidates",
+                        finalSamplingResult,
+                        new GeometryBuildResult(
+                            List.of(), null, null, 0, 0, List.of(), null, null, false, "")));
+        return;
+      }
+      if (!fieldSelection.message().isBlank()) {
+        samplingResult = samplingResult.appendSideResolutionMessage(fieldSelection.message());
+      }
+
       buildResult =
           geometryFeatureBuilder.build(
-              samplingResult.rowMeta(), samplingResult.rows(), options.geometryField());
+              samplingResult.rowMeta(), samplingResult.rows(), fieldSelection.selectedField());
 
       if (!buildResult.hasRenderableFeatures()) {
         SamplingResult finalSamplingResult = samplingResult;
@@ -164,35 +174,47 @@ public class GeometryInspectorGuiPlugin {
 
       SamplingResult finalSamplingResult = samplingResult;
       GeometryBuildResult finalBuildResult = buildResult;
-      SwingUtilities.invokeLater(
-          () -> {
-            try {
-              GeometryInspectorViewerFrame frame =
-                  new GeometryInspectorViewerFrame(
-                      finalSamplingResult,
-                      geometryFeatureBuilder,
-                      geometryFields,
-                      options.geometryField(),
-                      finalBuildResult,
-                      backgroundMapConfig);
-              frame.setVisible(true);
-            } catch (Throwable throwable) {
-              Display.getDefault()
-                  .asyncExec(
-                      () ->
-                          GeometryInspectorFallbackDialog.showError(
-                              HopGui.getInstance().getShell(),
-                              "Geometry inspector fallback",
-                              "Swing viewer initialization failed. Showing summary fallback.",
-                              throwable,
-                              finalSamplingResult,
-                              finalBuildResult));
-            }
-          });
+      Display.getDefault()
+          .asyncExec(
+              () -> {
+                try {
+                  GeometryInspectorSwtViewer viewer =
+                      new GeometryInspectorSwtViewer(
+                          HopGui.getInstance().getShell(),
+                          finalSamplingResult,
+                          geometryFeatureBuilder,
+                          fieldSelection.geometryFields(),
+                          fieldSelection.selectedField(),
+                          finalBuildResult,
+                          backgroundMapConfig);
+                  viewer.open();
+                } catch (Throwable throwable) {
+                  Display.getDefault()
+                      .asyncExec(
+                          () ->
+                              GeometryInspectorFallbackDialog.showError(
+                                  HopGui.getInstance().getShell(),
+                                  "Geometry inspector fallback",
+                                  "SWT viewer initialization failed. Showing summary fallback.",
+                                  throwable,
+                                  finalSamplingResult,
+                                  finalBuildResult));
+                }
+              });
 
     } catch (Exception e) {
       SamplingResult finalSamplingResult =
-          samplingResult == null ? new SamplingResult(List.of(), null, false, "") : samplingResult;
+          samplingResult == null
+              ? new SamplingResult(
+                  List.of(),
+                  null,
+                  false,
+                  "",
+                  GeometryInspectionSide.AUTO,
+                  null,
+                  false,
+                  "")
+              : samplingResult;
       GeometryBuildResult finalBuildResult =
           buildResult == null
               ? new GeometryBuildResult(
@@ -218,5 +240,24 @@ public class GeometryInspectorGuiPlugin {
     messageBox.setText(title);
     messageBox.setMessage(message);
     messageBox.open();
+  }
+
+  private List<GeometryFieldCandidate> detectOutputCandidates(HopGuiPipelineTransformContext context)
+      throws Exception {
+    IRowMeta outputRowMeta =
+        context
+            .getPipelineMeta()
+            .getTransformFields(context.getPipelineGraph().getVariables(), context.getTransformMeta());
+    return geometryFieldDetector.detectCandidates(outputRowMeta);
+  }
+
+  private List<GeometryFieldCandidate> detectInputCandidates(HopGuiPipelineTransformContext context)
+      throws Exception {
+    IRowMeta inputRowMeta =
+        context
+            .getPipelineMeta()
+            .getPrevTransformFields(
+                context.getPipelineGraph().getVariables(), context.getTransformMeta());
+    return geometryFieldDetector.detectCandidates(inputRowMeta);
   }
 }

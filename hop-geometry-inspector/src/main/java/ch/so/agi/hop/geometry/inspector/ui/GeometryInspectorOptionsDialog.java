@@ -2,7 +2,9 @@ package ch.so.agi.hop.geometry.inspector.ui;
 
 import ch.so.agi.hop.geometry.inspector.GeometryInspectorSettingsService;
 import ch.so.agi.hop.geometry.inspector.model.GeometryInspectorBackgroundMapConfig;
+import ch.so.agi.hop.geometry.inspector.model.GeometryFieldCandidate;
 import ch.so.agi.hop.geometry.inspector.model.GeometryInspectorOptions;
+import ch.so.agi.hop.geometry.inspector.model.GeometryInspectionSide;
 import ch.so.agi.hop.geometry.inspector.model.SamplingMode;
 import java.time.Duration;
 import java.util.List;
@@ -19,18 +21,18 @@ import org.eclipse.swt.widgets.Shell;
 public class GeometryInspectorOptionsDialog {
 
   private final Shell parent;
-  private final List<String> geometryFields;
-  private final String defaultGeometryField;
+  private final List<GeometryFieldCandidate> outputCandidates;
+  private final List<GeometryFieldCandidate> inputCandidates;
   private final GeometryInspectorSettingsService settingsService;
 
   public GeometryInspectorOptionsDialog(
       Shell parent,
-      List<String> geometryFields,
-      String defaultGeometryField,
+      List<GeometryFieldCandidate> outputCandidates,
+      List<GeometryFieldCandidate> inputCandidates,
       GeometryInspectorSettingsService settingsService) {
     this.parent = parent;
-    this.geometryFields = geometryFields;
-    this.defaultGeometryField = defaultGeometryField;
+    this.outputCandidates = outputCandidates == null ? List.of() : List.copyOf(outputCandidates);
+    this.inputCandidates = inputCandidates == null ? List.of() : List.copyOf(inputCandidates);
     this.settingsService = settingsService;
   }
 
@@ -39,15 +41,25 @@ public class GeometryInspectorOptionsDialog {
     shell.setText("Inspect geometries...");
     shell.setLayout(new GridLayout(2, false));
 
+    Label inspectionSideLabel = new Label(shell, SWT.NONE);
+    inspectionSideLabel.setText("Geometry source");
+
+    Combo inspectionSideCombo = new Combo(shell, SWT.DROP_DOWN | SWT.READ_ONLY);
+    inspectionSideCombo.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+    inspectionSideCombo.setItems(
+        new String[] {
+          GeometryInspectionSide.AUTO.label(),
+          GeometryInspectionSide.OUTPUT.label(),
+          GeometryInspectionSide.INPUT.label()
+        });
+    inspectionSideCombo.setText(GeometryInspectionSide.AUTO.label());
+
     Label geometryFieldLabel = new Label(shell, SWT.NONE);
     geometryFieldLabel.setText("Geometry field");
 
     Combo geometryFieldCombo = new Combo(shell, SWT.DROP_DOWN | SWT.READ_ONLY);
     geometryFieldCombo.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-    geometryFieldCombo.setItems(geometryFields.toArray(String[]::new));
-    if (defaultGeometryField != null) {
-      geometryFieldCombo.setText(defaultGeometryField);
-    }
+    updateGeometryFieldChoices(geometryFieldCombo, GeometryInspectionSide.AUTO, null);
 
     Label sampleSizeLabel = new Label(shell, SWT.NONE);
     sampleSizeLabel.setText("Sample size");
@@ -95,6 +107,14 @@ public class GeometryInspectorOptionsDialog {
 
     final GeometryInspectorOptions[] result = new GeometryInspectorOptions[1];
 
+    inspectionSideCombo.addListener(
+        SWT.Selection,
+        event ->
+            updateGeometryFieldChoices(
+                geometryFieldCombo,
+                GeometryInspectionSide.fromLabel(inspectionSideCombo.getText()),
+                geometryFieldCombo.getText()));
+
     backgroundSettingsButton.addListener(
         SWT.Selection,
         event -> {
@@ -115,16 +135,27 @@ public class GeometryInspectorOptionsDialog {
             int sampleSize = Integer.parseInt(sampleSizeCombo.getText().trim());
             int timeoutSeconds = Integer.parseInt(timeoutCombo.getText().trim());
             SamplingMode mode = SamplingMode.fromLabel(samplingModeCombo.getText());
+            GeometryInspectionSide inspectionSide =
+                GeometryInspectionSide.fromLabel(inspectionSideCombo.getText());
             String geometryField = geometryFieldCombo.getText();
+
+            if (geometryField == null || geometryField.isBlank()) {
+              throw new IllegalArgumentException("No geometry field selected");
+            }
 
             result[0] =
                 new GeometryInspectorOptions(
-                    sampleSize, mode, geometryField, Duration.ofSeconds(timeoutSeconds));
+                    sampleSize,
+                    mode,
+                    inspectionSide,
+                    geometryField,
+                    Duration.ofSeconds(timeoutSeconds));
             shell.dispose();
           } catch (Exception e) {
             MessageBox messageBox = new MessageBox(shell, SWT.ICON_WARNING | SWT.OK);
             messageBox.setText("Invalid options");
-            messageBox.setMessage("Please provide valid numeric values for sample size and timeout.");
+            messageBox.setMessage(
+                "Please provide valid numeric values and select a geometry field.");
             messageBox.open();
           }
         });
@@ -154,5 +185,45 @@ public class GeometryInspectorOptionsDialog {
         "Background map: configured for "
             + String.join(", ", backgroundMapConfig.parsedLayerNames())
             + (backgroundMapConfig.enabledByDefault() ? " (enabled by default)" : ""));
+  }
+
+  private void updateGeometryFieldChoices(
+      Combo geometryFieldCombo, GeometryInspectionSide side, String preferredSelection) {
+    List<GeometryFieldCandidate> candidates = candidatesForSide(side);
+    List<String> fieldNames = candidates.stream().map(GeometryFieldCandidate::fieldName).toList();
+    geometryFieldCombo.setItems(fieldNames.toArray(String[]::new));
+
+    String selection = preferredSelection;
+    if (selection == null || selection.isBlank() || !fieldNames.contains(selection)) {
+      selection = chooseDefaultField(candidates);
+    }
+
+    if (selection != null && !selection.isBlank()) {
+      geometryFieldCombo.setText(selection);
+    } else {
+      geometryFieldCombo.deselectAll();
+      geometryFieldCombo.clearSelection();
+      geometryFieldCombo.setText("");
+    }
+  }
+
+  private List<GeometryFieldCandidate> candidatesForSide(GeometryInspectionSide side) {
+    return switch (side) {
+      case OUTPUT -> outputCandidates;
+      case INPUT -> inputCandidates;
+      case AUTO -> !outputCandidates.isEmpty() ? outputCandidates : inputCandidates;
+    };
+  }
+
+  private String chooseDefaultField(List<GeometryFieldCandidate> candidates) {
+    if (candidates == null || candidates.isEmpty()) {
+      return null;
+    }
+    for (GeometryFieldCandidate candidate : candidates) {
+      if (candidate.geometryValueMeta()) {
+        return candidate.fieldName();
+      }
+    }
+    return candidates.get(0).fieldName();
   }
 }

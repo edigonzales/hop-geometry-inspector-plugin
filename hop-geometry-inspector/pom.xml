@@ -42,11 +42,6 @@
     </dependency>
     <dependency>
       <groupId>org.geotools</groupId>
-      <artifactId>gt-swing</artifactId>
-      <version>${geotools.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.geotools</groupId>
       <artifactId>gt-wms</artifactId>
       <version>${geotools.version}</version>
     </dependency>
@@ -60,7 +55,6 @@
       <artifactId>jts-core</artifactId>
       <version>${jts.version}</version>
     </dependency>
-
     <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter</artifactId>

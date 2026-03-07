@@ -1,6 +1,7 @@
 package ch.so.agi.hop.geometry.inspector.ui;
 
 import ch.so.agi.hop.geometry.inspector.model.GeometryBuildResult;
+import ch.so.agi.hop.geometry.inspector.model.GeometryInspectionSide;
 import ch.so.agi.hop.geometry.inspector.model.SamplingResult;
 import org.apache.hop.ui.core.dialog.ErrorDialog;
 import org.eclipse.swt.SWT;
@@ -35,6 +36,17 @@ public final class GeometryInspectorFallbackDialog {
       SamplingResult samplingResult, GeometryBuildResult buildResult) {
     StringBuilder summary = new StringBuilder();
     summary.append("Sampled rows: ").append(samplingResult.rows().size()).append("\n");
+    summary
+        .append("Requested source: ")
+        .append(describeSide(samplingResult.requestedSide()))
+        .append("\n");
+    summary
+        .append("Effective source: ")
+        .append(
+            samplingResult.effectiveSide() == null
+                ? "unresolved"
+                : describeSide(samplingResult.effectiveSide()))
+        .append("\n");
     summary.append("Parsed features: ").append(buildResult.features().size()).append("\n");
     summary.append("Parse errors: ").append(buildResult.parseErrors()).append("\n");
     summary.append("Null/empty geometries: ").append(buildResult.nullGeometries()).append("\n");
@@ -48,6 +60,10 @@ public final class GeometryInspectorFallbackDialog {
 
     if (!samplingResult.reason().isBlank()) {
       summary.append("Reason: ").append(samplingResult.reason()).append("\n");
+    }
+
+    if (!samplingResult.sideResolutionMessage().isBlank()) {
+      summary.append("Source resolution: ").append(samplingResult.sideResolutionMessage()).append("\n");
     }
 
     if (!buildResult.crsStatusMessage().isBlank()) {
@@ -67,5 +83,12 @@ public final class GeometryInspectorFallbackDialog {
     }
 
     return summary.toString();
+  }
+
+  private static String describeSide(GeometryInspectionSide side) {
+    if (side == null) {
+      return "unresolved";
+    }
+    return side.rowsLabel();
   }
 }

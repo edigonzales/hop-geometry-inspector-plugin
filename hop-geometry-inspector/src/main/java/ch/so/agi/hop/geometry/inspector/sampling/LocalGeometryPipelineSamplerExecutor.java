@@ -1,6 +1,7 @@
 package ch.so.agi.hop.geometry.inspector.sampling;
 
 import ch.so.agi.hop.geometry.inspector.model.GeometryInspectorOptions;
+import ch.so.agi.hop.geometry.inspector.model.GeometryInspectionSide;
 import ch.so.agi.hop.geometry.inspector.model.SamplingMode;
 import ch.so.agi.hop.geometry.inspector.model.SamplingResult;
 import java.util.List;
@@ -17,6 +18,16 @@ import org.apache.hop.pipeline.transform.ITransform;
 import org.apache.hop.pipeline.transform.RowAdapter;
 
 public class LocalGeometryPipelineSamplerExecutor implements GeometryPipelineSamplerExecutor {
+
+  private final GeometrySamplingResultResolver samplingResultResolver;
+
+  public LocalGeometryPipelineSamplerExecutor() {
+    this(new GeometrySamplingResultResolver());
+  }
+
+  LocalGeometryPipelineSamplerExecutor(GeometrySamplingResultResolver samplingResultResolver) {
+    this.samplingResultResolver = samplingResultResolver;
+  }
 
   @Override
   public SamplingResult execute(
@@ -45,7 +56,9 @@ public class LocalGeometryPipelineSamplerExecutor implements GeometryPipelineSam
 
     pipeline.prepareExecution();
 
-    GeometrySampleCollector collector =
+    GeometrySampleCollector outputCollector =
+        new GeometrySampleCollector(options.sampleSize(), options.mode());
+    GeometrySampleCollector inputCollector =
         new GeometrySampleCollector(options.sampleSize(), options.mode());
 
     List<IEngineComponent> components = pipeline.getComponentCopies(targetTransformName);
@@ -63,8 +76,20 @@ public class LocalGeometryPipelineSamplerExecutor implements GeometryPipelineSam
             @Override
             public void rowWrittenEvent(IRowMeta rowMeta, Object[] row) throws HopTransformException {
               try {
-                collector.accept(rowMeta, row);
-                if (options.mode() == SamplingMode.FIRST && collector.isFull()) {
+                outputCollector.accept(rowMeta, row);
+                if (shouldStopEarly(options, inputCollector, outputCollector)) {
+                  pipeline.stopAll();
+                }
+              } catch (Exception e) {
+                throw new HopTransformException("Failed to collect sampled row", e);
+              }
+            }
+
+            @Override
+            public void rowReadEvent(IRowMeta rowMeta, Object[] row) throws HopTransformException {
+              try {
+                inputCollector.accept(rowMeta, row);
+                if (shouldStopEarly(options, inputCollector, outputCollector)) {
                   pipeline.stopAll();
                 }
               } catch (Exception e) {
@@ -88,7 +113,28 @@ public class LocalGeometryPipelineSamplerExecutor implements GeometryPipelineSam
       partial = options.mode() != SamplingMode.FIRST;
     }
 
-    return new SamplingResult(collector.snapshotRows(), collector.snapshotRowMeta(), partial, reason);
+    return samplingResultResolver.resolve(
+        options.inspectionSide(),
+        outputCollector.snapshotRows(),
+        outputCollector.snapshotRowMeta(),
+        inputCollector.snapshotRows(),
+        inputCollector.snapshotRowMeta(),
+        partial,
+        reason);
+  }
+
+  private boolean shouldStopEarly(
+      GeometryInspectorOptions options,
+      GeometrySampleCollector inputCollector,
+      GeometrySampleCollector outputCollector) {
+    if (options.mode() != SamplingMode.FIRST) {
+      return false;
+    }
+
+    return switch (options.inspectionSide()) {
+      case AUTO, OUTPUT -> outputCollector.isFull();
+      case INPUT -> inputCollector.isFull();
+    };
   }
 
   private boolean waitForCompletion(LocalPipelineEngine pipeline, GeometryInspectorOptions options)

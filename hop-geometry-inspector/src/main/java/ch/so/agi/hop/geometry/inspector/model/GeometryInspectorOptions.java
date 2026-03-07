@@ -3,7 +3,11 @@ package ch.so.agi.hop.geometry.inspector.model;
 import java.time.Duration;
 
 public record GeometryInspectorOptions(
-    int sampleSize, SamplingMode mode, String geometryField, Duration timeout) {
+    int sampleSize,
+    SamplingMode mode,
+    GeometryInspectionSide inspectionSide,
+    String geometryField,
+    Duration timeout) {
 
   public GeometryInspectorOptions {
     if (sampleSize <= 0) {
@@ -11,6 +15,9 @@ public record GeometryInspectorOptions(
     }
     if (mode == null) {
       throw new IllegalArgumentException("mode must not be null");
+    }
+    if (inspectionSide == null) {
+      throw new IllegalArgumentException("inspectionSide must not be null");
     }
     if (geometryField == null || geometryField.isBlank()) {
       throw new IllegalArgumentException("geometryField must not be blank");
