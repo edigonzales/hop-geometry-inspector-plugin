@@ -1,0 +1,95 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>ch.so.agi</groupId>
+  <artifactId>hop-geometry-inspector-plugin-parent</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+  <packaging>pom</packaging>
+
+  <name>Apache Hop Geometry Inspector Plugin</name>
+  <description>Desktop Geometry Inspector plugin for Apache Hop.</description>
+
+  <modules>
+    <module>hop-geometry-inspector</module>
+    <module>assemblies</module>
+  </modules>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <maven.compiler.release>17</maven.compiler.release>
+    <hop.version>2.17.0</hop.version>
+    <jts.version>1.20.0</jts.version>
+    <geotools.version>31.3</geotools.version>
+    <junit.version>5.12.0</junit.version>
+    <assertj.version>3.27.3</assertj.version>
+    <jandex.plugin.version>3.2.7</jandex.plugin.version>
+    <maven.compiler.version>3.14.0</maven.compiler.version>
+    <maven.surefire.version>3.5.2</maven.surefire.version>
+    <maven.assembly.version>3.7.1</maven.assembly.version>
+    <maven.jar.version>3.4.2</maven.jar.version>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.apache.hop</groupId>
+        <artifactId>hop-core</artifactId>
+        <version>${hop.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hop</groupId>
+        <artifactId>hop-engine</artifactId>
+        <version>${hop.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hop</groupId>
+        <artifactId>hop-ui</artifactId>
+        <version>${hop.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.junit.jupiter</groupId>
+        <artifactId>junit-jupiter</artifactId>
+        <version>${junit.version}</version>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <repositories>
+    <repository>
+      <id>central</id>
+      <url>https://repo1.maven.org/maven2/</url>
+    </repository>
+    <repository>
+      <id>osgeo</id>
+      <url>https://repo.osgeo.org/repository/release/</url>
+    </repository>
+  </repositories>
+
+  <build>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <artifactId>maven-compiler-plugin</artifactId>
+          <version>${maven.compiler.version}</version>
+          <configuration>
+            <release>${maven.compiler.release}</release>
+          </configuration>
+        </plugin>
+        <plugin>
+          <artifactId>maven-surefire-plugin</artifactId>
+          <version>${maven.surefire.version}</version>
+        </plugin>
+        <plugin>
+          <artifactId>maven-jar-plugin</artifactId>
+          <version>${maven.jar.version}</version>
+        </plugin>
+        <plugin>
+          <artifactId>maven-assembly-plugin</artifactId>
+          <version>${maven.assembly.version}</version>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+  </build>
+</project>
