@@ -55,7 +55,6 @@
       <artifactId>jts-core</artifactId>
       <version>${jts.version}</version>
     </dependency>
-
     <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter</artifactId>

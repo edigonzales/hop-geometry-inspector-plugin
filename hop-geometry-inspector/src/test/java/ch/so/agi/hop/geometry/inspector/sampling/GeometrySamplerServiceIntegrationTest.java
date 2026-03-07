@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.so.agi.hop.geometry.inspector.PreviewPipelinePruner;
 import ch.so.agi.hop.geometry.inspector.model.GeometryInspectorOptions;
+import ch.so.agi.hop.geometry.inspector.model.GeometryInspectionSide;
 import ch.so.agi.hop.geometry.inspector.model.SamplingMode;
 import ch.so.agi.hop.geometry.inspector.model.SamplingResult;
 import java.time.Duration;
@@ -38,7 +39,12 @@ class GeometrySamplerServiceIntegrationTest {
     GeometrySamplerService service = new GeometrySamplerService(new PreviewPipelinePruner(), executor);
 
     GeometryInspectorOptions options =
-        new GeometryInspectorOptions(200, SamplingMode.RANDOM, "geom", Duration.ofSeconds(30));
+        new GeometryInspectorOptions(
+            200,
+            SamplingMode.RANDOM,
+            GeometryInspectionSide.AUTO,
+            "geom",
+            Duration.ofSeconds(30));
 
     SamplingResult result =
         service.sample(pipelineMeta, new Variables(), null, "Target", options);
@@ -79,7 +85,12 @@ class GeometrySamplerServiceIntegrationTest {
     GeometrySamplerService service = new GeometrySamplerService(new PreviewPipelinePruner(), executor);
 
     GeometryInspectorOptions options =
-        new GeometryInspectorOptions(50, SamplingMode.FIRST, "geom", Duration.ofSeconds(30));
+        new GeometryInspectorOptions(
+            50,
+            SamplingMode.FIRST,
+            GeometryInspectionSide.AUTO,
+            "geom",
+            Duration.ofSeconds(30));
 
     service.sample(pipelineMeta, new Variables(), null, "Target", options);
 
@@ -109,7 +120,14 @@ class GeometrySamplerServiceIntegrationTest {
       org.apache.hop.core.row.RowMeta rowMeta = new org.apache.hop.core.row.RowMeta();
       rowMeta.addValueMeta(new org.apache.hop.core.row.value.ValueMetaString("geom"));
       return new SamplingResult(
-          java.util.List.<Object[]>of(new Object[] {"POINT (0 0)"}), rowMeta, false, "");
+          java.util.List.<Object[]>of(new Object[] {"POINT (0 0)"}),
+          rowMeta,
+          false,
+          "",
+          GeometryInspectionSide.AUTO,
+          GeometryInspectionSide.OUTPUT,
+          false,
+          "Inspecting output rows.");
     }
   }
 }

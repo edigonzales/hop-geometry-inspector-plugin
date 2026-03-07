@@ -1,5 +1,6 @@
 package ch.so.agi.hop.geometry.inspector.ui;
 
+import java.awt.Rectangle;
 import org.geotools.api.referencing.crs.CoordinateReferenceSystem;
 import org.geotools.api.referencing.crs.GeographicCRS;
 import org.geotools.geometry.jts.ReferencedEnvelope;
@@ -12,6 +13,7 @@ final class GeometryInspectorViewportMath {
   private static final double MISSING_AXIS_RATIO = 0.02d;
   private static final double GEOGRAPHIC_POINT_SPAN = 0.0001d;
   private static final double DEFAULT_POINT_SPAN = 1.0d;
+  private static final double INITIAL_PADDING_RATIO = 0.02d;
   private static final double ASPECT_EPSILON = 1.0e-9d;
 
   private GeometryInspectorViewportMath() {}
@@ -63,6 +65,21 @@ final class GeometryInspectorViewportMath {
         coordinateReferenceSystem);
   }
 
+  static ReferencedEnvelope paddedInitialExtent(ReferencedEnvelope envelope) {
+    ReferencedEnvelope normalized = normalizeExtent(envelope);
+    if (normalized == null) {
+      return null;
+    }
+    double widthPadding = Math.max(normalized.getWidth() * INITIAL_PADDING_RATIO, ABS_MIN_SPAN);
+    double heightPadding = Math.max(normalized.getHeight() * INITIAL_PADDING_RATIO, ABS_MIN_SPAN);
+    return new ReferencedEnvelope(
+        normalized.getMinX() - widthPadding,
+        normalized.getMaxX() + widthPadding,
+        normalized.getMinY() - heightPadding,
+        normalized.getMaxY() + heightPadding,
+        normalized.getCoordinateReferenceSystem());
+  }
+
   static ReferencedEnvelope fitToCanvasAspect(
       ReferencedEnvelope envelope, int canvasWidth, int canvasHeight) {
     ReferencedEnvelope normalized = normalizeExtent(envelope);
@@ -99,6 +116,97 @@ final class GeometryInspectorViewportMath {
         normalized.getCoordinateReferenceSystem());
   }
 
+  static ReferencedEnvelope intersectAreas(
+      ReferencedEnvelope first, ReferencedEnvelope second) {
+    ReferencedEnvelope normalizedFirst = normalizeExtent(first);
+    ReferencedEnvelope normalizedSecond = normalizeExtent(second);
+    if (normalizedFirst == null || normalizedSecond == null) {
+      return null;
+    }
+
+    double minX = Math.max(normalizedFirst.getMinX(), normalizedSecond.getMinX());
+    double maxX = Math.min(normalizedFirst.getMaxX(), normalizedSecond.getMaxX());
+    double minY = Math.max(normalizedFirst.getMinY(), normalizedSecond.getMinY());
+    double maxY = Math.min(normalizedFirst.getMaxY(), normalizedSecond.getMaxY());
+    if (!Double.isFinite(minX)
+        || !Double.isFinite(maxX)
+        || !Double.isFinite(minY)
+        || !Double.isFinite(maxY)
+        || maxX <= minX
+        || maxY <= minY) {
+      return null;
+    }
+
+    CoordinateReferenceSystem coordinateReferenceSystem =
+        normalizedFirst.getCoordinateReferenceSystem() != null
+            ? normalizedFirst.getCoordinateReferenceSystem()
+            : normalizedSecond.getCoordinateReferenceSystem();
+    return new ReferencedEnvelope(minX, maxX, minY, maxY, coordinateReferenceSystem);
+  }
+
+  static Rectangle worldToPixelRect(
+      ReferencedEnvelope viewArea, int pixelWidth, int pixelHeight, ReferencedEnvelope worldArea) {
+    ReferencedEnvelope normalizedViewArea = normalizeExtent(viewArea);
+    ReferencedEnvelope clippedWorldArea = intersectAreas(normalizedViewArea, worldArea);
+    if (normalizedViewArea == null
+        || clippedWorldArea == null
+        || pixelWidth <= 0
+        || pixelHeight <= 0) {
+      return new Rectangle();
+    }
+
+    double scaleX = pixelWidth / normalizedViewArea.getWidth();
+    double scaleY = pixelHeight / normalizedViewArea.getHeight();
+    if (!Double.isFinite(scaleX) || !Double.isFinite(scaleY) || scaleX <= 0.0d || scaleY <= 0.0d) {
+      return new Rectangle();
+    }
+
+    int minX =
+        clampToRange(
+            (int)
+                Math.floor((clippedWorldArea.getMinX() - normalizedViewArea.getMinX()) * scaleX),
+            0,
+            pixelWidth);
+    int maxX =
+        clampToRange(
+            (int)
+                Math.ceil((clippedWorldArea.getMaxX() - normalizedViewArea.getMinX()) * scaleX),
+            0,
+            pixelWidth);
+    int minY =
+        clampToRange(
+            (int)
+                Math.floor((normalizedViewArea.getMaxY() - clippedWorldArea.getMaxY()) * scaleY),
+            0,
+            pixelHeight);
+    int maxY =
+        clampToRange(
+            (int)
+                Math.ceil((normalizedViewArea.getMaxY() - clippedWorldArea.getMinY()) * scaleY),
+            0,
+            pixelHeight);
+
+    return new Rectangle(minX, minY, Math.max(0, maxX - minX), Math.max(0, maxY - minY));
+  }
+
+  static GeometryInspectorViewTransform createViewTransform(
+      ReferencedEnvelope displayArea, int canvasWidth, int canvasHeight) {
+    ReferencedEnvelope renderArea = fitToCanvasAspect(displayArea, canvasWidth, canvasHeight);
+    if (renderArea == null || canvasWidth <= 1 || canvasHeight <= 1) {
+      return null;
+    }
+
+    double scaleX = canvasWidth / renderArea.getWidth();
+    double scaleY = canvasHeight / renderArea.getHeight();
+    double scale = Math.min(scaleX, scaleY);
+    if (!Double.isFinite(scale) || scale <= 0.0d) {
+      return null;
+    }
+
+    return new GeometryInspectorViewTransform(
+        renderArea, canvasWidth, canvasHeight, scale, 0.0d, 0.0d);
+  }
+
   static ReferencedEnvelope zoomAt(
       ReferencedEnvelope displayArea,
       int canvasWidth,
@@ -106,52 +214,51 @@ final class GeometryInspectorViewportMath {
       int screenX,
       int screenY,
       double factor) {
-    ReferencedEnvelope fitted = fitToCanvasAspect(displayArea, canvasWidth, canvasHeight);
-    if (fitted == null
+    ReferencedEnvelope normalized = normalizeExtent(displayArea);
+    ReferencedEnvelope renderArea = fitToCanvasAspect(normalized, canvasWidth, canvasHeight);
+    GeometryInspectorViewTransform viewTransform =
+        createViewTransform(renderArea, canvasWidth, canvasHeight);
+    if (viewTransform == null
         || canvasWidth <= 1
         || canvasHeight <= 1
         || !Double.isFinite(factor)
         || factor <= 0.0d) {
-      return fitted;
+      return normalized;
     }
 
-    Coordinate anchor = screenToWorld(fitted, canvasWidth, canvasHeight, screenX, screenY);
-    double width = Math.max(fitted.getWidth() * factor, ABS_MIN_SPAN);
-    double height = Math.max(fitted.getHeight() * factor, ABS_MIN_SPAN);
+    Coordinate anchor = viewTransform.screenToWorld(screenX, screenY);
+    double width = Math.max(renderArea.getWidth() * factor, ABS_MIN_SPAN);
+    double height = Math.max(renderArea.getHeight() * factor, ABS_MIN_SPAN);
 
-    double xRatio = clamp((anchor.x - fitted.getMinX()) / fitted.getWidth());
-    double yRatio = clamp((fitted.getMaxY() - anchor.y) / fitted.getHeight());
+    double xRatio = clamp((anchor.x - renderArea.getMinX()) / renderArea.getWidth());
+    double yRatio = clamp((renderArea.getMaxY() - anchor.y) / renderArea.getHeight());
 
     double minX = anchor.x - (width * xRatio);
     double maxX = minX + width;
     double maxY = anchor.y + (height * yRatio);
     double minY = maxY - height;
 
-    return fitToCanvasAspect(
-        new ReferencedEnvelope(minX, maxX, minY, maxY, fitted.getCoordinateReferenceSystem()),
-        canvasWidth,
-        canvasHeight);
+    return normalizeExtent(
+        new ReferencedEnvelope(minX, maxX, minY, maxY, normalized.getCoordinateReferenceSystem()));
   }
 
   static ReferencedEnvelope zoomByFactor(
       ReferencedEnvelope displayArea, int canvasWidth, int canvasHeight, double factor) {
-    ReferencedEnvelope fitted = fitToCanvasAspect(displayArea, canvasWidth, canvasHeight);
-    if (fitted == null || !Double.isFinite(factor) || factor <= 0.0d) {
-      return fitted;
+    ReferencedEnvelope renderArea = fitToCanvasAspect(displayArea, canvasWidth, canvasHeight);
+    if (renderArea == null || !Double.isFinite(factor) || factor <= 0.0d) {
+      return normalizeExtent(displayArea);
     }
 
-    double width = Math.max(fitted.getWidth() * factor, ABS_MIN_SPAN);
-    double height = Math.max(fitted.getHeight() * factor, ABS_MIN_SPAN);
+    double width = Math.max(renderArea.getWidth() * factor, ABS_MIN_SPAN);
+    double height = Math.max(renderArea.getHeight() * factor, ABS_MIN_SPAN);
 
-    return fitToCanvasAspect(
+    return normalizeExtent(
         new ReferencedEnvelope(
-            fitted.getCenterX() - (width / 2.0d),
-            fitted.getCenterX() + (width / 2.0d),
-            fitted.getCenterY() - (height / 2.0d),
-            fitted.getCenterY() + (height / 2.0d),
-            fitted.getCoordinateReferenceSystem()),
-        canvasWidth,
-        canvasHeight);
+            renderArea.getCenterX() - (width / 2.0d),
+            renderArea.getCenterX() + (width / 2.0d),
+            renderArea.getCenterY() - (height / 2.0d),
+            renderArea.getCenterY() + (height / 2.0d),
+            renderArea.getCoordinateReferenceSystem()));
   }
 
   static ReferencedEnvelope pan(
@@ -160,23 +267,23 @@ final class GeometryInspectorViewportMath {
       int canvasHeight,
       int deltaX,
       int deltaY) {
-    ReferencedEnvelope fitted = fitToCanvasAspect(displayArea, canvasWidth, canvasHeight);
-    if (fitted == null || canvasWidth <= 1 || canvasHeight <= 1) {
-      return fitted;
+    ReferencedEnvelope renderArea = fitToCanvasAspect(displayArea, canvasWidth, canvasHeight);
+    GeometryInspectorViewTransform viewTransform =
+        createViewTransform(renderArea, canvasWidth, canvasHeight);
+    if (viewTransform == null || canvasWidth <= 1 || canvasHeight <= 1) {
+      return normalizeExtent(displayArea);
     }
 
-    double worldDeltaX = (fitted.getWidth() / canvasWidth) * deltaX;
-    double worldDeltaY = (fitted.getHeight() / canvasHeight) * deltaY;
+    double worldDeltaX = deltaX / viewTransform.scale();
+    double worldDeltaY = deltaY / viewTransform.scale();
 
-    return fitToCanvasAspect(
+    return normalizeExtent(
         new ReferencedEnvelope(
-            fitted.getMinX() - worldDeltaX,
-            fitted.getMaxX() - worldDeltaX,
-            fitted.getMinY() + worldDeltaY,
-            fitted.getMaxY() + worldDeltaY,
-            fitted.getCoordinateReferenceSystem()),
-        canvasWidth,
-        canvasHeight);
+            renderArea.getMinX() - worldDeltaX,
+            renderArea.getMaxX() - worldDeltaX,
+            renderArea.getMinY() + worldDeltaY,
+            renderArea.getMaxY() + worldDeltaY,
+            renderArea.getCoordinateReferenceSystem()));
   }
 
   static Coordinate screenToWorld(
@@ -185,14 +292,12 @@ final class GeometryInspectorViewportMath {
       int canvasHeight,
       int screenX,
       int screenY) {
-    ReferencedEnvelope fitted = fitToCanvasAspect(displayArea, canvasWidth, canvasHeight);
-    if (fitted == null || canvasWidth <= 1 || canvasHeight <= 1) {
+    GeometryInspectorViewTransform viewTransform =
+        createViewTransform(displayArea, canvasWidth, canvasHeight);
+    if (viewTransform == null) {
       return new Coordinate(0.0d, 0.0d);
     }
-
-    double x = fitted.getMinX() + ((double) screenX / canvasWidth) * fitted.getWidth();
-    double y = fitted.getMaxY() - ((double) screenY / canvasHeight) * fitted.getHeight();
-    return new Coordinate(x, y);
+    return viewTransform.screenToWorld(screenX, screenY);
   }
 
   static Envelope pickEnvelope(
@@ -202,19 +307,12 @@ final class GeometryInspectorViewportMath {
       int screenX,
       int screenY,
       double tolerancePixels) {
-    ReferencedEnvelope fitted = fitToCanvasAspect(displayArea, canvasWidth, canvasHeight);
-    if (fitted == null || canvasWidth <= 1 || canvasHeight <= 1) {
+    GeometryInspectorViewTransform viewTransform =
+        createViewTransform(displayArea, canvasWidth, canvasHeight);
+    if (viewTransform == null || canvasWidth <= 1 || canvasHeight <= 1) {
       return new Envelope();
     }
-
-    double toleranceX = Math.max((fitted.getWidth() / canvasWidth) * tolerancePixels, ABS_MIN_SPAN);
-    double toleranceY = Math.max((fitted.getHeight() / canvasHeight) * tolerancePixels, ABS_MIN_SPAN);
-    Coordinate coordinate = screenToWorld(fitted, canvasWidth, canvasHeight, screenX, screenY);
-    return new Envelope(
-        coordinate.x - toleranceX,
-        coordinate.x + toleranceX,
-        coordinate.y - toleranceY,
-        coordinate.y + toleranceY);
+    return viewTransform.pickEnvelope(screenX, screenY, tolerancePixels);
   }
 
   static int worldToScreenX(
@@ -222,12 +320,12 @@ final class GeometryInspectorViewportMath {
       int canvasWidth,
       int canvasHeight,
       double worldX) {
-    ReferencedEnvelope fitted = fitToCanvasAspect(displayArea, canvasWidth, canvasHeight);
-    if (fitted == null || canvasWidth <= 1) {
+    GeometryInspectorViewTransform viewTransform =
+        createViewTransform(displayArea, canvasWidth, canvasHeight);
+    if (viewTransform == null || canvasWidth <= 1) {
       return 0;
     }
-    double ratio = (worldX - fitted.getMinX()) / fitted.getWidth();
-    return (int) Math.round(ratio * canvasWidth);
+    return viewTransform.worldToScreenX(worldX);
   }
 
   static int worldToScreenY(
@@ -235,12 +333,12 @@ final class GeometryInspectorViewportMath {
       int canvasWidth,
       int canvasHeight,
       double worldY) {
-    ReferencedEnvelope fitted = fitToCanvasAspect(displayArea, canvasWidth, canvasHeight);
-    if (fitted == null || canvasHeight <= 1) {
+    GeometryInspectorViewTransform viewTransform =
+        createViewTransform(displayArea, canvasWidth, canvasHeight);
+    if (viewTransform == null || canvasHeight <= 1) {
       return 0;
     }
-    double ratio = (fitted.getMaxY() - worldY) / fitted.getHeight();
-    return (int) Math.round(ratio * canvasHeight);
+    return viewTransform.worldToScreenY(worldY);
   }
 
   static boolean sameArea(ReferencedEnvelope left, ReferencedEnvelope right) {
@@ -268,6 +366,13 @@ final class GeometryInspectorViewportMath {
       return 0.5d;
     }
     return Math.max(0.0d, Math.min(1.0d, value));
+  }
+
+  private static int clampToRange(int value, int min, int max) {
+    if (value < min) {
+      return min;
+    }
+    return Math.min(value, max);
   }
 
   private static double finiteMidpoint(double min, double max) {

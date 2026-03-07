@@ -3,6 +3,7 @@ package ch.so.agi.hop.geometry.inspector.ui;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 
+import java.awt.Rectangle;
 import org.geotools.geometry.jts.ReferencedEnvelope;
 import org.geotools.referencing.crs.DefaultGeographicCRS;
 import org.junit.jupiter.api.Test;
@@ -35,67 +36,147 @@ class GeometryInspectorViewportMathTest {
   }
 
   @Test
+  void paddedInitialExtentAddsSmallOneTimeMargin() {
+    ReferencedEnvelope envelope = new ReferencedEnvelope(0.0d, 100.0d, 0.0d, 50.0d, null);
+
+    ReferencedEnvelope padded = GeometryInspectorViewportMath.paddedInitialExtent(envelope);
+
+    assertThat(padded.getWidth()).isEqualTo(104.0d);
+    assertThat(padded.getHeight()).isEqualTo(52.0d);
+    assertThat(padded.getCenterX()).isEqualTo(50.0d);
+    assertThat(padded.getCenterY()).isEqualTo(25.0d);
+  }
+
+  @Test
   void fitToCanvasAspectExpandsWidthForWiderCanvas() {
-    ReferencedEnvelope envelope = new ReferencedEnvelope(0.0d, 100.0d, 0.0d, 100.0d, null);
+    ReferencedEnvelope displayArea = new ReferencedEnvelope(0.0d, 100.0d, 0.0d, 100.0d, null);
 
-    ReferencedEnvelope fitted = GeometryInspectorViewportMath.fitToCanvasAspect(envelope, 600, 300);
+    ReferencedEnvelope renderArea =
+        GeometryInspectorViewportMath.fitToCanvasAspect(displayArea, 600, 300);
 
-    assertThat(fitted.getWidth()).isEqualTo(200.0d);
-    assertThat(fitted.getHeight()).isEqualTo(100.0d);
-    assertThat(fitted.getCenterX()).isEqualTo(50.0d);
-    assertThat(fitted.getCenterY()).isEqualTo(50.0d);
+    assertThat(renderArea.getWidth()).isEqualTo(200.0d);
+    assertThat(renderArea.getHeight()).isEqualTo(100.0d);
+    assertThat(renderArea.getCenterX()).isEqualTo(50.0d);
+    assertThat(renderArea.getCenterY()).isEqualTo(50.0d);
   }
 
   @Test
   void fitToCanvasAspectExpandsHeightForTallerCanvas() {
-    ReferencedEnvelope envelope = new ReferencedEnvelope(0.0d, 200.0d, 0.0d, 100.0d, null);
+    ReferencedEnvelope displayArea = new ReferencedEnvelope(0.0d, 200.0d, 0.0d, 100.0d, null);
 
-    ReferencedEnvelope fitted = GeometryInspectorViewportMath.fitToCanvasAspect(envelope, 300, 300);
+    ReferencedEnvelope renderArea =
+        GeometryInspectorViewportMath.fitToCanvasAspect(displayArea, 300, 300);
 
-    assertThat(fitted.getWidth()).isEqualTo(200.0d);
-    assertThat(fitted.getHeight()).isEqualTo(200.0d);
-    assertThat(fitted.getCenterX()).isEqualTo(100.0d);
-    assertThat(fitted.getCenterY()).isEqualTo(50.0d);
+    assertThat(renderArea.getWidth()).isEqualTo(200.0d);
+    assertThat(renderArea.getHeight()).isEqualTo(200.0d);
+    assertThat(renderArea.getCenterX()).isEqualTo(100.0d);
+    assertThat(renderArea.getCenterY()).isEqualTo(50.0d);
   }
 
   @Test
-  void zoomAtKeepsAnchorStableAndAspectFit() {
+  void createViewTransformUsesFullCanvasWithoutOffsets() {
+    ReferencedEnvelope displayArea = new ReferencedEnvelope(0.0d, 100.0d, 0.0d, 50.0d, null);
+
+    GeometryInspectorViewTransform transform =
+        GeometryInspectorViewportMath.createViewTransform(displayArea, 300, 300);
+
+    assertThat(transform.logicalRenderWidth()).isEqualTo(300);
+    assertThat(transform.logicalRenderHeight()).isEqualTo(300);
+    assertThat(transform.paintX()).isEqualTo(0);
+    assertThat(transform.paintY()).isEqualTo(0);
+    assertThat(transform.displayArea().getWidth()).isEqualTo(100.0d);
+    assertThat(transform.displayArea().getHeight()).isEqualTo(100.0d);
+  }
+
+  @Test
+  void zoomAtKeepsAnchorStableAgainstTransientRenderArea() {
     ReferencedEnvelope displayArea = new ReferencedEnvelope(0.0d, 100.0d, 0.0d, 50.0d, null);
 
     ReferencedEnvelope zoomed =
-        GeometryInspectorViewportMath.zoomAt(displayArea, 400, 200, 200, 100, 0.5d);
+        GeometryInspectorViewportMath.zoomAt(displayArea, 300, 300, 150, 150, 0.5d);
     Coordinate anchorBefore =
-        GeometryInspectorViewportMath.screenToWorld(displayArea, 400, 200, 200, 100);
-    Coordinate anchorAfter = GeometryInspectorViewportMath.screenToWorld(zoomed, 400, 200, 200, 100);
+        GeometryInspectorViewportMath.screenToWorld(displayArea, 300, 300, 150, 150);
+    Coordinate anchorAfter = GeometryInspectorViewportMath.screenToWorld(zoomed, 300, 300, 150, 150);
 
     assertThat(anchorAfter.x).isCloseTo(anchorBefore.x, within(1.0e-9d));
     assertThat(anchorAfter.y).isCloseTo(anchorBefore.y, within(1.0e-9d));
-    assertThat(zoomed.getWidth() / zoomed.getHeight()).isCloseTo(2.0d, within(1.0e-9d));
+    assertThat(zoomed.getWidth()).isEqualTo(50.0d);
+    assertThat(zoomed.getHeight()).isEqualTo(50.0d);
   }
 
   @Test
-  void panKeepsDisplayAreaAspectRatio() {
+  void panUsesTransientRenderAreaScale() {
     ReferencedEnvelope displayArea = new ReferencedEnvelope(0.0d, 100.0d, 0.0d, 50.0d, null);
 
-    ReferencedEnvelope panned = GeometryInspectorViewportMath.pan(displayArea, 400, 200, 40, -20);
+    ReferencedEnvelope panned = GeometryInspectorViewportMath.pan(displayArea, 300, 300, 30, -15);
 
     assertThat(panned.getMinX()).isEqualTo(-10.0d);
     assertThat(panned.getMaxX()).isEqualTo(90.0d);
-    assertThat(panned.getMinY()).isEqualTo(-5.0d);
-    assertThat(panned.getMaxY()).isEqualTo(45.0d);
-    assertThat(panned.getWidth() / panned.getHeight()).isCloseTo(2.0d, within(1.0e-9d));
+    assertThat(panned.getMinY()).isEqualTo(-30.0d);
+    assertThat(panned.getMaxY()).isEqualTo(70.0d);
   }
 
   @Test
-  void pickEnvelopeExpandsAroundPointerPosition() {
+  void pickEnvelopeExpandsAroundPointerPositionUsingFullCanvasRenderArea() {
     ReferencedEnvelope displayArea = new ReferencedEnvelope(0.0d, 100.0d, 0.0d, 50.0d, null);
 
     Envelope pickEnvelope =
-        GeometryInspectorViewportMath.pickEnvelope(displayArea, 400, 200, 200, 100, 6.0d);
+        GeometryInspectorViewportMath.pickEnvelope(displayArea, 300, 300, 150, 150, 6.0d);
 
-    assertThat(pickEnvelope.getWidth()).isCloseTo(3.0d, within(1.0e-9d));
-    assertThat(pickEnvelope.getHeight()).isCloseTo(3.0d, within(1.0e-9d));
+    assertThat(pickEnvelope.getWidth()).isCloseTo(4.0d, within(1.0e-9d));
+    assertThat(pickEnvelope.getHeight()).isCloseTo(4.0d, within(1.0e-9d));
     assertThat(pickEnvelope.centre().x).isCloseTo(50.0d, within(1.0e-9d));
     assertThat(pickEnvelope.centre().y).isCloseTo(25.0d, within(1.0e-9d));
+  }
+
+  @Test
+  void worldToPixelRectFillsCanvasWhenFrameAndViewMatch() {
+    ReferencedEnvelope renderArea = new ReferencedEnvelope(0.0d, 100.0d, 0.0d, 50.0d, null);
+
+    Rectangle rect =
+        GeometryInspectorViewportMath.worldToPixelRect(renderArea, 400, 200, renderArea);
+
+    assertThat(rect.x).isEqualTo(0);
+    assertThat(rect.y).isEqualTo(0);
+    assertThat(rect.width).isEqualTo(400);
+    assertThat(rect.height).isEqualTo(200);
+  }
+
+  @Test
+  void worldToPixelRectShiftsDestinationDuringPanPreview() {
+    ReferencedEnvelope currentRenderArea = new ReferencedEnvelope(-10.0d, 90.0d, 0.0d, 50.0d, null);
+    ReferencedEnvelope previousFrameArea = new ReferencedEnvelope(0.0d, 100.0d, 0.0d, 50.0d, null);
+    ReferencedEnvelope visibleArea =
+        GeometryInspectorViewportMath.intersectAreas(currentRenderArea, previousFrameArea);
+
+    Rectangle destinationRect =
+        GeometryInspectorViewportMath.worldToPixelRect(currentRenderArea, 400, 200, visibleArea);
+
+    assertThat(destinationRect.x).isEqualTo(40);
+    assertThat(destinationRect.y).isEqualTo(0);
+    assertThat(destinationRect.width).isEqualTo(360);
+    assertThat(destinationRect.height).isEqualTo(200);
+  }
+
+  @Test
+  void worldToPixelRectCropsSourceDuringZoomInPreview() {
+    ReferencedEnvelope currentRenderArea = new ReferencedEnvelope(25.0d, 75.0d, 0.0d, 50.0d, null);
+    ReferencedEnvelope previousFrameArea = new ReferencedEnvelope(0.0d, 100.0d, 0.0d, 50.0d, null);
+    ReferencedEnvelope visibleArea =
+        GeometryInspectorViewportMath.intersectAreas(currentRenderArea, previousFrameArea);
+
+    Rectangle sourceRect =
+        GeometryInspectorViewportMath.worldToPixelRect(previousFrameArea, 400, 200, visibleArea);
+    Rectangle destinationRect =
+        GeometryInspectorViewportMath.worldToPixelRect(currentRenderArea, 400, 200, visibleArea);
+
+    assertThat(sourceRect.x).isEqualTo(100);
+    assertThat(sourceRect.y).isEqualTo(0);
+    assertThat(sourceRect.width).isEqualTo(200);
+    assertThat(sourceRect.height).isEqualTo(200);
+    assertThat(destinationRect.x).isEqualTo(0);
+    assertThat(destinationRect.y).isEqualTo(0);
+    assertThat(destinationRect.width).isEqualTo(400);
+    assertThat(destinationRect.height).isEqualTo(200);
   }
 }

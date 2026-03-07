@@ -3,8 +3,10 @@ package ch.so.agi.hop.geometry.inspector.ui;
 import ch.so.agi.hop.geometry.inspector.GeometryFeatureBuilder;
 import ch.so.agi.hop.geometry.inspector.GeometryInspectorClassLoaderSupport;
 import ch.so.agi.hop.geometry.inspector.GeometrySelectionService;
+import java.awt.Rectangle;
 import ch.so.agi.hop.geometry.inspector.model.GeometryBuildResult;
 import ch.so.agi.hop.geometry.inspector.model.GeometryInspectorBackgroundMapConfig;
+import ch.so.agi.hop.geometry.inspector.model.GeometryInspectionSide;
 import ch.so.agi.hop.geometry.inspector.model.SamplingResult;
 import java.awt.Color;
 import java.awt.Graphics2D;
@@ -60,6 +62,12 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
   private static final long BACKGROUND_DEBOUNCE_MILLIS = 220L;
   private static final int BACKGROUND_CACHE_SIZE = 8;
 
+  private enum ViewportRefreshMode {
+    PREVIEW_ONLY,
+    DEBOUNCED,
+    COMMIT
+  }
+
   private final SamplingResult samplingResult;
   private final GeometryFeatureBuilder featureBuilder;
   private final GeometrySelectionService selectionService;
@@ -80,6 +88,7 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
   private final GeometryInspectorToolbarButton zoomOutButton;
   private final GeometryInspectorToolbarButton zoomExtentButton;
   private final GeometryInspectorToolbarButton refreshButton;
+  private final Label inspectionSourceLabel;
   private final Label selectionSummaryLabel;
   private final Table attributeTable;
   private final Text geometryDetailText;
@@ -123,9 +132,10 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
 
     Composite header = new Composite(shell, SWT.NONE);
     header.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-    GridLayout headerLayout = new GridLayout(7, false);
+    GridLayout headerLayout = new GridLayout(4, false);
     headerLayout.marginHeight = 8;
     headerLayout.marginWidth = 8;
+    headerLayout.horizontalSpacing = 10;
     header.setLayout(headerLayout);
 
     Label fieldLabel = new Label(header, SWT.NONE);
@@ -138,8 +148,12 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
       fieldCombo.setText(selectedField);
     }
 
+    inspectionSourceLabel = new Label(header, SWT.WRAP);
+    inspectionSourceLabel.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+    inspectionSourceLabel.setText(buildInspectionSourceLabel());
+
     Composite tools = new Composite(header, SWT.NONE);
-    tools.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+    tools.setLayoutData(new GridData(SWT.END, SWT.CENTER, false, false));
     GridLayout toolsLayout = new GridLayout(5, false);
     toolsLayout.marginWidth = 0;
     toolsLayout.marginHeight = 0;
@@ -216,6 +230,7 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
     backgroundToggle.setSelected(
         this.backgroundMapConfig.isValid() && this.backgroundMapConfig.enabledByDefault());
     updateBackgroundAvailability();
+    updateInspectionSourceLabel();
     updateStatusLabel();
 
     shell.addListener(SWT.Dispose, event -> close());
@@ -245,11 +260,11 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
   }
 
   private void bindUi() {
-    fieldCombo.addListener(SWT.Selection, event -> refreshForSelectedField());
+    fieldCombo.addListener(SWT.Selection, event -> refreshForSelectedField(false));
     zoomInButton.addListener(SWT.Selection, event -> zoomBy(1.0d / 1.2d));
     zoomOutButton.addListener(SWT.Selection, event -> zoomBy(1.2d));
     zoomExtentButton.addListener(SWT.Selection, event -> zoomToExtent());
-    refreshButton.addListener(SWT.Selection, event -> refreshForSelectedField());
+    refreshButton.addListener(SWT.Selection, event -> refreshForSelectedField(true));
     backgroundToggle.addListener(SWT.Selection, event -> onBackgroundToggleChanged());
 
     mapCanvas.addListener(SWT.Paint, this::paintMapCanvas);
@@ -259,17 +274,19 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
           if (syncCanvasMetrics(false)) {
             if (viewportModel.displayArea() == null && currentBuildResult != null) {
               setDisplayArea(defaultExtent(currentBuildResult));
-            } else if (viewportModel.displayArea() != null) {
-              setDisplayArea(viewportModel.displayArea());
             }
-            invalidateFramesForViewportChange(true, true, false);
+            refreshViewport(true, true, ViewportRefreshMode.DEBOUNCED);
           }
         });
     mapCanvas.addListener(
         SWT.MouseVerticalWheel,
         event -> {
           syncCanvasMetrics(false);
-          if (!viewportModel.isCanvasUsable() || viewportModel.displayArea() == null) {
+          GeometryInspectorViewTransform viewTransform = currentViewTransform();
+          if (!viewportModel.isCanvasUsable()
+              || viewportModel.displayArea() == null
+              || viewTransform == null
+              || !viewTransform.containsScreenPoint(event.x, event.y)) {
             return;
           }
           double steps = event.count == 0 ? 0.0d : Math.abs(event.count) / 3.0d;
@@ -292,13 +309,17 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
             return;
           }
           setDisplayArea(nextDisplayArea);
-          invalidateFramesForViewportChange(true, true, true);
+          refreshViewport(true, true, ViewportRefreshMode.DEBOUNCED);
         });
     mapCanvas.addListener(
         SWT.MouseDown,
         event -> {
           if (event.button == 1) {
             syncCanvasMetrics(false);
+            GeometryInspectorViewTransform viewTransform = currentViewTransform();
+            if (viewTransform == null || !viewTransform.containsScreenPoint(event.x, event.y)) {
+              return;
+            }
             viewportModel.beginDrag(event.x, event.y);
           }
         });
@@ -325,7 +346,7 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
                   viewportModel.canvasHeight(),
                   deltaX,
                   deltaY));
-          invalidateFramesForViewportChange(true, true, true);
+          refreshViewport(true, true, ViewportRefreshMode.PREVIEW_ONLY);
         });
     mapCanvas.addListener(
         SWT.MouseUp,
@@ -336,10 +357,7 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
           boolean dragged = viewportModel.dragMoved();
           viewportModel.endDrag();
           if (dragged) {
-            overlayStatus = "rendering";
-            requestOverlayRender(true);
-            requestBackgroundRender(false);
-            updateStatusLabel();
+            refreshViewport(true, true, ViewportRefreshMode.COMMIT);
           } else {
             identifyFeature(event.x, event.y);
           }
@@ -348,10 +366,7 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
         SWT.Move,
         event -> {
           if (syncCanvasMetrics(false)) {
-            if (viewportModel.displayArea() != null) {
-              setDisplayArea(viewportModel.displayArea());
-            }
-            invalidateFramesForViewportChange(true, true, false);
+            refreshViewport(true, true, ViewportRefreshMode.DEBOUNCED);
           }
         });
   }
@@ -372,13 +387,13 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
     return Math.max(100, shell.getMonitor() == null ? 100 : shell.getMonitor().getZoom());
   }
 
-  private ReferencedEnvelope fitDisplayAreaToCanvas(ReferencedEnvelope displayArea) {
-    return GeometryInspectorViewportMath.fitToCanvasAspect(
-        displayArea, viewportModel.canvasWidth(), viewportModel.canvasHeight());
+  private GeometryInspectorViewTransform currentViewTransform() {
+    return GeometryInspectorViewportMath.createViewTransform(
+        viewportModel.displayArea(), viewportModel.canvasWidth(), viewportModel.canvasHeight());
   }
 
   private void setDisplayArea(ReferencedEnvelope displayArea) {
-    viewportModel.setDisplayArea(fitDisplayAreaToCanvas(displayArea));
+    viewportModel.setDisplayArea(GeometryInspectorViewportMath.normalizeExtent(displayArea));
   }
 
   private boolean syncCanvasMetrics(boolean force) {
@@ -389,7 +404,7 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
     return viewportModel.updateCanvasMetrics(size.x, size.y, currentDeviceZoom());
   }
 
-  private void refreshForSelectedField() {
+  private void refreshForSelectedField(boolean resetBackgroundInitialization) {
     String selectedField = fieldCombo.getText();
     if (selectedField == null || selectedField.isBlank()) {
       return;
@@ -399,6 +414,9 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
       GeometryBuildResult buildResult =
           GeometryInspectorClassLoaderSupport.withPluginContextClassLoader(
               () -> featureBuilder.build(samplingResult.rowMeta(), samplingResult.rows(), selectedField));
+      if (resetBackgroundInitialization) {
+        backgroundMapClient.resetInitialization();
+      }
       applyBuildResult(buildResult, true);
       requestOverlayRender(true);
       requestBackgroundRender(false);
@@ -432,7 +450,7 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
     if (buildResult == null || buildResult.extent() == null || buildResult.extent().isEmpty()) {
       return null;
     }
-    return fitDisplayAreaToCanvas(buildResult.extent());
+    return GeometryInspectorViewportMath.paddedInitialExtent(buildResult.extent());
   }
 
   private void zoomBy(double factor) {
@@ -445,7 +463,7 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
             viewportModel.canvasWidth(),
             viewportModel.canvasHeight(),
             factor));
-    invalidateFramesForViewportChange(true, true, false);
+    refreshViewport(true, true, ViewportRefreshMode.DEBOUNCED);
   }
 
   private void zoomToExtent() {
@@ -454,21 +472,37 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
       return;
     }
     setDisplayArea(extent);
-    invalidateFramesForViewportChange(true, true, false);
+    refreshViewport(true, true, ViewportRefreshMode.DEBOUNCED);
   }
 
-  private void invalidateFramesForViewportChange(
-      boolean invalidateOverlay, boolean invalidateBackground, boolean interactionOnly) {
-    if (invalidateOverlay) {
-      overlayStatus = interactionOnly ? "stale" : "rendering";
-      requestOverlayRender(!interactionOnly);
+  private void refreshViewport(
+      boolean refreshOverlay, boolean refreshBackground, ViewportRefreshMode mode) {
+    boolean renderOverlay =
+        refreshOverlay && currentBuildResult != null && currentBuildResult.hasRenderableFeatures();
+    boolean renderBackground =
+        refreshBackground && backgroundToggle.isSelected() && backgroundToggle.isEnabled();
+
+    if (renderOverlay) {
+      overlayStatus = mode == ViewportRefreshMode.COMMIT ? "rendering" : "stale";
+    } else if (refreshOverlay) {
+      overlayStatus = "idle";
     }
-    if (invalidateBackground && backgroundToggle.isSelected() && backgroundToggle.isEnabled()) {
-      backgroundStatus = interactionOnly ? "stale" : "loading";
-      requestBackgroundRender(false);
+    if (renderBackground) {
+      backgroundStatus = mode == ViewportRefreshMode.COMMIT ? "loading" : "stale";
     }
+
     updateStatusLabel();
     redrawMapCanvas();
+
+    if (mode == ViewportRefreshMode.PREVIEW_ONLY) {
+      return;
+    }
+    if (renderOverlay) {
+      requestOverlayRender(mode == ViewportRefreshMode.COMMIT);
+    }
+    if (renderBackground) {
+      requestBackgroundRender(false);
+    }
   }
 
   private void requestOverlayRender(boolean immediate) {
@@ -479,8 +513,7 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
     }
 
     syncCanvasMetrics(false);
-    ReferencedEnvelope displayArea = fitDisplayAreaToCanvas(viewportModel.displayArea());
-    setDisplayArea(displayArea);
+    ReferencedEnvelope displayArea = GeometryInspectorViewportMath.normalizeExtent(viewportModel.displayArea());
     if (!viewportModel.isCanvasUsable() || displayArea == null) {
       overlayStatus = "idle";
       updateStatusLabel();
@@ -540,22 +573,26 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
     }
 
     syncCanvasMetrics(false);
-    ReferencedEnvelope displayArea = fitDisplayAreaToCanvas(viewportModel.displayArea());
-    setDisplayArea(displayArea);
+    ReferencedEnvelope displayArea = GeometryInspectorViewportMath.normalizeExtent(viewportModel.displayArea());
     if (!viewportModel.isCanvasUsable() || displayArea == null) {
       backgroundStatus = "off";
       updateStatusLabel();
       return;
     }
 
+    GeometryInspectorBackgroundMapClient.RequestParameters requestParameters =
+        backgroundMapClient.buildRequestParameters(
+            displayArea,
+            viewportModel.canvasWidth(),
+            viewportModel.canvasHeight(),
+            viewportModel.deviceZoom(),
+            currentBuildResult == null ? null : currentBuildResult.detectedSrid());
     GeometryInspectorFrameKey cacheKey =
         GeometryInspectorFrameKey.forBackground(
             backgroundMapConfig,
-            displayArea,
-            GeometryInspectorViewportMath.toPixelSize(
-                viewportModel.canvasWidth(), viewportModel.deviceZoom()),
-            GeometryInspectorViewportMath.toPixelSize(
-                viewportModel.canvasHeight(), viewportModel.deviceZoom()),
+            requestParameters.displayArea(),
+            requestParameters.pixelWidth(),
+            requestParameters.pixelHeight(),
             viewportModel.deviceZoom(),
             currentBuildResult == null ? null : currentBuildResult.detectedSrid(),
             true);
@@ -574,6 +611,12 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
       updateStatusLabel();
       return;
     }
+    if (backgroundMapClient.hasInitializationFailure() && !immediate) {
+      backgroundStatus = "error";
+      backgroundErrorMessage = backgroundMapClient.initializationFailureMessage();
+      updateStatusLabel();
+      return;
+    }
 
     ReferencedEnvelope areaSnapshot = displayArea;
     int logicalWidth = viewportModel.canvasWidth();
@@ -585,11 +628,11 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
     backgroundErrorMessage = "";
     updateStatusLabel();
 
-    backgroundCoordinator.schedule(
-        immediate ? 0L : BACKGROUND_DEBOUNCE_MILLIS,
-        revision ->
-            backgroundMapClient.render(
-                areaSnapshot, logicalWidth, logicalHeight, deviceZoom, srid, revision),
+      backgroundCoordinator.schedule(
+          immediate ? 0L : BACKGROUND_DEBOUNCE_MILLIS,
+          revision ->
+              backgroundMapClient.render(
+                  areaSnapshot, logicalWidth, logicalHeight, deviceZoom, srid, revision),
         (revision, rasterData) -> {
           if (shell.isDisposed()) {
             return;
@@ -607,8 +650,10 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
             return;
           }
           backgroundStatus = "error";
-          backgroundErrorMessage = rootCauseMessage(error);
-          setBackgroundFrame(null);
+          backgroundErrorMessage =
+              backgroundMapClient.hasInitializationFailure()
+                  ? backgroundMapClient.initializationFailureMessage()
+                  : rootCauseMessage(error);
           updateStatusLabel();
           redrawMapCanvas();
         });
@@ -633,6 +678,11 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
       int logicalHeight,
       int deviceZoom,
       long revision) {
+    ReferencedEnvelope renderArea =
+        GeometryInspectorViewportMath.fitToCanvasAspect(displayArea, logicalWidth, logicalHeight);
+    if (renderArea == null) {
+      throw new IllegalStateException("Unable to create render area for overlay rendering");
+    }
     int pixelWidth = GeometryInspectorViewportMath.toPixelSize(logicalWidth, deviceZoom);
     int pixelHeight = GeometryInspectorViewportMath.toPixelSize(logicalHeight, deviceZoom);
     BufferedImage image =
@@ -661,14 +711,14 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
       renderer.paint(
           graphics,
           new java.awt.Rectangle(0, 0, pixelWidth, pixelHeight),
-          fitDisplayAreaToCanvas(displayArea));
+          renderArea);
     } finally {
       mapContent.dispose();
       graphics.dispose();
     }
 
     return GeometryInspectorRasterData.fromBufferedImage(
-        fitDisplayAreaToCanvas(displayArea),
+        renderArea,
         logicalWidth,
         logicalHeight,
         deviceZoom,
@@ -748,8 +798,12 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
       return;
     }
 
-    ReferencedEnvelope displayArea = fitDisplayAreaToCanvas(viewportModel.displayArea());
-    if (displayArea == null || !viewportModel.isCanvasUsable()) {
+    GeometryInspectorViewTransform viewTransform = currentViewTransform();
+    if (viewTransform == null || !viewportModel.isCanvasUsable()) {
+      updateSelection(null);
+      return;
+    }
+    if (!viewTransform.containsScreenPoint(x, y)) {
       updateSelection(null);
       return;
     }
@@ -757,10 +811,10 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
     double tolerance = PICK_TOLERANCE_PIXELS * (viewportModel.deviceZoom() / 100.0d);
     Coordinate coordinate =
         GeometryInspectorViewportMath.screenToWorld(
-            displayArea, viewportModel.canvasWidth(), viewportModel.canvasHeight(), x, y);
+            viewportModel.displayArea(), viewportModel.canvasWidth(), viewportModel.canvasHeight(), x, y);
     Envelope pickEnvelope =
         GeometryInspectorViewportMath.pickEnvelope(
-            displayArea,
+            viewportModel.displayArea(),
             viewportModel.canvasWidth(),
             viewportModel.canvasHeight(),
             x,
@@ -895,44 +949,40 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
     if (frame == null || frame.image() == null || frame.image().isDisposed()) {
       return;
     }
-    ReferencedEnvelope viewportArea = fitDisplayAreaToCanvas(viewportModel.displayArea());
-    ReferencedEnvelope frameArea = frame.displayArea();
-    if (viewportArea == null || frameArea == null) {
-      return;
-    }
-
-    int left =
-        GeometryInspectorViewportMath.worldToScreenX(
-            viewportArea, clientArea.width, clientArea.height, frameArea.getMinX());
-    int right =
-        GeometryInspectorViewportMath.worldToScreenX(
-            viewportArea, clientArea.width, clientArea.height, frameArea.getMaxX());
-    int top =
-        GeometryInspectorViewportMath.worldToScreenY(
-            viewportArea, clientArea.width, clientArea.height, frameArea.getMaxY());
-    int bottom =
-        GeometryInspectorViewportMath.worldToScreenY(
-            viewportArea, clientArea.width, clientArea.height, frameArea.getMinY());
-
-    int destX = Math.min(left, right);
-    int destY = Math.min(top, bottom);
-    int destWidth = Math.abs(right - left);
-    int destHeight = Math.abs(bottom - top);
-    if (destWidth <= 0 || destHeight <= 0) {
+    ReferencedEnvelope currentRenderArea =
+        GeometryInspectorViewportMath.fitToCanvasAspect(
+            viewportModel.displayArea(), clientArea.width, clientArea.height);
+    ReferencedEnvelope frameRenderArea = frame.displayArea();
+    ReferencedEnvelope visibleArea =
+        GeometryInspectorViewportMath.intersectAreas(currentRenderArea, frameRenderArea);
+    if (currentRenderArea == null || frameRenderArea == null || visibleArea == null) {
       return;
     }
 
     org.eclipse.swt.graphics.Rectangle imageBounds = frame.image().getBounds();
+    Rectangle sourceRect =
+        GeometryInspectorViewportMath.worldToPixelRect(
+            frameRenderArea, imageBounds.width, imageBounds.height, visibleArea);
+    Rectangle destinationRect =
+        GeometryInspectorViewportMath.worldToPixelRect(
+            currentRenderArea, clientArea.width, clientArea.height, visibleArea);
+    if (sourceRect.width <= 0
+        || sourceRect.height <= 0
+        || destinationRect.width <= 0
+        || destinationRect.height <= 0) {
+      return;
+    }
+
     gc.drawImage(
         frame.image(),
-        0,
-        0,
-        imageBounds.width,
-        imageBounds.height,
-        destX,
-        destY,
-        destWidth,
-        destHeight);
+        sourceRect.x,
+        sourceRect.y,
+        sourceRect.width,
+        sourceRect.height,
+        destinationRect.x,
+        destinationRect.y,
+        destinationRect.width,
+        destinationRect.height);
   }
 
   private SimpleFeature featureForRow(GeometryBuildResult buildResult, Integer rowIndex) {
@@ -969,6 +1019,7 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
       return;
     }
 
+    backgroundMapClient.resetInitialization();
     requestBackgroundRender(true);
   }
 
@@ -1029,7 +1080,11 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
     }
 
     StringBuilder status = new StringBuilder();
-    status.append("sampled rows=").append(samplingResult.rows().size());
+    status.append("source=").append(describeEffectiveSide());
+    if (samplingResult.autoSwitched()) {
+      status.append(" (auto-switched)");
+    }
+    status.append(" | sampled rows=").append(samplingResult.rows().size());
     status.append(" | parsed features=")
         .append(currentBuildResult == null ? 0 : currentBuildResult.features().size());
     status.append(" | parse errors=")
@@ -1039,6 +1094,9 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
     status.append(" | sample=").append(samplingResult.partial() ? "partial" : "full");
     if (samplingResult.reason() != null && !samplingResult.reason().isBlank()) {
       status.append(" (").append(samplingResult.reason()).append(')');
+    }
+    if (!samplingResult.sideResolutionMessage().isBlank()) {
+      status.append(" | ").append(samplingResult.sideResolutionMessage());
     }
     if (currentBuildResult != null && !currentBuildResult.crsStatusMessage().isBlank()) {
       status.append(" | crs=").append(currentBuildResult.crsStatusMessage());
@@ -1053,6 +1111,33 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
     }
     statusLabel.setText(status.toString());
     statusLabel.getParent().layout();
+  }
+
+  private void updateInspectionSourceLabel() {
+    if (inspectionSourceLabel.isDisposed()) {
+      return;
+    }
+    inspectionSourceLabel.setText(buildInspectionSourceLabel());
+    inspectionSourceLabel.getParent().layout();
+  }
+
+  private String buildInspectionSourceLabel() {
+    StringBuilder label = new StringBuilder("Inspecting ");
+    label.append(describeEffectiveSide());
+    if (samplingResult.autoSwitched()) {
+      label.append(" (auto-switched)");
+    }
+    return label.toString();
+  }
+
+  private String describeEffectiveSide() {
+    GeometryInspectionSide effectiveSide = samplingResult.effectiveSide();
+    if (effectiveSide == null) {
+      return samplingResult.requestedSide() == null
+          ? "unresolved rows"
+          : samplingResult.requestedSide().rowsLabel();
+    }
+    return effectiveSide.rowsLabel();
   }
 
   private String abbreviate(String value, int maxLength) {

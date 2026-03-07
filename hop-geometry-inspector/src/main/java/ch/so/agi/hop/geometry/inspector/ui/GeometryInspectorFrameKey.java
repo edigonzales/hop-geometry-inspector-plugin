@@ -30,8 +30,7 @@ record GeometryInspectorFrameKey(
       int deviceZoom,
       Integer srid,
       boolean enabled) {
-    ReferencedEnvelope normalized =
-        GeometryInspectorViewportMath.fitToCanvasAspect(displayArea, pixelWidth, pixelHeight);
+    ReferencedEnvelope normalized = displayArea == null ? null : new ReferencedEnvelope(displayArea);
     return new GeometryInspectorFrameKey(
         round(normalized == null ? 0.0d : normalized.getMinX()),
         round(normalized == null ? 0.0d : normalized.getMaxX()),

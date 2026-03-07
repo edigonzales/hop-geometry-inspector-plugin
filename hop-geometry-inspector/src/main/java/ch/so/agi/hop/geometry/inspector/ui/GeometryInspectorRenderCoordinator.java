@@ -1,6 +1,7 @@
 package ch.so.agi.hop.geometry.inspector.ui;
 
 import ch.so.agi.hop.geometry.inspector.GeometryInspectorClassLoaderSupport;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -55,7 +56,7 @@ final class GeometryInspectorRenderCoordinator<T> implements AutoCloseable {
     long revision = latestRevision.incrementAndGet();
     ScheduledFuture<?> previous = scheduledFuture.getAndSet(null);
     if (previous != null) {
-      previous.cancel(true);
+      previous.cancel(false);
     }
 
     if (closed) {
@@ -81,6 +82,10 @@ final class GeometryInspectorRenderCoordinator<T> implements AutoCloseable {
                         resultHandler.handle(revision, result);
                       }
                     });
+              } catch (InterruptedException interruptedException) {
+                // Benign cancellation during debounced rendering.
+              } catch (CancellationException cancellationException) {
+                // Cancellation is expected during debounced rendering.
               } catch (Throwable throwable) {
                 if (closed || revision != latestRevision.get()) {
                   return;
@@ -103,7 +108,7 @@ final class GeometryInspectorRenderCoordinator<T> implements AutoCloseable {
     latestRevision.incrementAndGet();
     ScheduledFuture<?> previous = scheduledFuture.getAndSet(null);
     if (previous != null) {
-      previous.cancel(true);
+      previous.cancel(false);
     }
   }
 
@@ -115,7 +120,7 @@ final class GeometryInspectorRenderCoordinator<T> implements AutoCloseable {
   public void close() {
     closed = true;
     cancelPending();
-    executorService.shutdownNow();
+    executorService.shutdown();
   }
 
   private static final AtomicInteger THREAD_COUNTER = new AtomicInteger();

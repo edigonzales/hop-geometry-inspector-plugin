@@ -3,6 +3,7 @@ package ch.so.agi.hop.geometry.inspector.ui;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.graphics.GC;
+import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.widgets.Canvas;
@@ -20,6 +21,11 @@ final class GeometryInspectorToolbarButton extends Canvas {
   private boolean selected;
   private boolean hover;
   private boolean pressed;
+  private Image enabledIconImage;
+  private Image disabledIconImage;
+  private boolean enabledIconResolved;
+  private boolean disabledIconResolved;
+  private int cachedDeviceZoom = -1;
 
   GeometryInspectorToolbarButton(
       Composite parent, GeometryInspectorToolbarIcons.Symbol symbol, boolean toggle) {
@@ -67,6 +73,7 @@ final class GeometryInspectorToolbarButton extends Canvas {
           }
           redraw();
         });
+    addListener(SWT.Dispose, event -> disposeCachedImages());
   }
 
   @Override
@@ -113,14 +120,74 @@ final class GeometryInspectorToolbarButton extends Canvas {
       gc.fillRoundRectangle(area.x, area.y, area.width - 1, area.height - 1, ARC, ARC);
       gc.drawRoundRectangle(area.x, area.y, area.width - 1, area.height - 1, ARC, ARC);
 
+      GeometryInspectorToolbarIcons.PaintStyle iconStyle =
+          GeometryInspectorToolbarIcons.styleFor(isEnabled());
       int iconX = area.x + Math.max(0, (area.width - LOGICAL_ICON_SIZE) / 2);
       int iconY = area.y + Math.max(0, (area.height - LOGICAL_ICON_SIZE) / 2);
-      GeometryInspectorToolbarIcons.paint(
-          gc, symbol, iconX, iconY, LOGICAL_ICON_SIZE, isEnabled());
+      Image iconImage = getIconImage(isEnabled());
+      if (iconImage != null && !iconImage.isDisposed()) {
+        int previousAlpha = gc.getAlpha();
+        gc.setAlpha(iconStyle.alpha());
+        Rectangle iconBounds = iconImage.getBounds();
+        gc.drawImage(
+            iconImage,
+            0,
+            0,
+            iconBounds.width,
+            iconBounds.height,
+            iconX,
+            iconY,
+            LOGICAL_ICON_SIZE,
+            LOGICAL_ICON_SIZE);
+        gc.setAlpha(previousAlpha);
+      }
     } finally {
       fill.dispose();
       border.dispose();
     }
+  }
+
+  private Image getIconImage(boolean enabled) {
+    int deviceZoom = currentDeviceZoom();
+    if (cachedDeviceZoom != deviceZoom) {
+      disposeCachedImages();
+      cachedDeviceZoom = deviceZoom;
+    }
+
+    if (enabled) {
+      if (!enabledIconResolved) {
+        enabledIconImage =
+            GeometryInspectorToolbarIcons.createImage(
+                getDisplay(), symbol, LOGICAL_ICON_SIZE, deviceZoom, true);
+        enabledIconResolved = true;
+      }
+      return enabledIconImage;
+    }
+
+    if (!disabledIconResolved) {
+      disabledIconImage =
+          GeometryInspectorToolbarIcons.createImage(
+              getDisplay(), symbol, LOGICAL_ICON_SIZE, deviceZoom, false);
+      disabledIconResolved = true;
+    }
+    return disabledIconImage;
+  }
+
+  private int currentDeviceZoom() {
+    return Math.max(100, getMonitor() == null ? 100 : getMonitor().getZoom());
+  }
+
+  private void disposeCachedImages() {
+    if (enabledIconImage != null && !enabledIconImage.isDisposed()) {
+      enabledIconImage.dispose();
+    }
+    if (disabledIconImage != null && !disabledIconImage.isDisposed()) {
+      disabledIconImage.dispose();
+    }
+    enabledIconImage = null;
+    disabledIconImage = null;
+    enabledIconResolved = false;
+    disabledIconResolved = false;
   }
 
   private boolean contains(int x, int y) {

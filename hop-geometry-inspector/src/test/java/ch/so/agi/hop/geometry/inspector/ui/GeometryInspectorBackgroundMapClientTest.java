@@ -1,6 +1,7 @@
 package ch.so.agi.hop.geometry.inspector.ui;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import ch.so.agi.hop.geometry.inspector.model.GeometryInspectorBackgroundMapConfig;
 import java.io.IOException;
@@ -9,6 +10,7 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.geotools.api.geometry.Bounds;
 import org.geotools.data.ows.Response;
 import org.geotools.http.HTTPResponse;
@@ -45,6 +47,8 @@ class GeometryInspectorBackgroundMapClientTest {
     assertThat(capabilitiesUrl)
         .isEqualTo(
             "https://example.com/wms?service=WMS&request=GetCapabilities&version=1.3.0");
+    assertThat(parameters.logicalWidth()).isEqualTo(400);
+    assertThat(parameters.logicalHeight()).isEqualTo(200);
     assertThat(parameters.pixelWidth()).isEqualTo(800);
     assertThat(parameters.pixelHeight()).isEqualTo(400);
     assertThat(parameters.srsCode()).isEqualTo("EPSG:2056");
@@ -53,7 +57,7 @@ class GeometryInspectorBackgroundMapClientTest {
   }
 
   @Test
-  void fitsRequestExtentToCanvasAspect() {
+  void usesTransientRenderAreaAndFullCanvasPixelSize() {
     GeometryInspectorBackgroundMapClient client =
         new GeometryInspectorBackgroundMapClient(
             new GeometryInspectorBackgroundMapConfig(
@@ -71,6 +75,10 @@ class GeometryInspectorBackgroundMapClientTest {
 
     assertThat(parameters.displayArea().getWidth()).isEqualTo(100.0d);
     assertThat(parameters.displayArea().getHeight()).isEqualTo(100.0d);
+    assertThat(parameters.logicalWidth()).isEqualTo(300);
+    assertThat(parameters.logicalHeight()).isEqualTo(300);
+    assertThat(parameters.pixelWidth()).isEqualTo(300);
+    assertThat(parameters.pixelHeight()).isEqualTo(300);
   }
 
   @Test
@@ -105,6 +113,45 @@ class GeometryInspectorBackgroundMapClientTest {
     assertThat(request.bounds).isEqualTo(parameters.displayArea());
     assertThat(request.layerNames).containsExactly("base", "overlay");
     assertThat(request.styles).containsExactly("bright", "bright");
+  }
+
+  @Test
+  void failedInitializationDoesNotRetryUntilReset() {
+    AtomicInteger attempts = new AtomicInteger();
+    GeometryInspectorBackgroundMapClient client =
+        new GeometryInspectorBackgroundMapClient(
+            new GeometryInspectorBackgroundMapConfig(
+                "https://example.com/wms",
+                "base",
+                "",
+                "image/png",
+                "1.3.0",
+                true,
+                true),
+            capabilitiesUrl -> {
+              attempts.incrementAndGet();
+              throw new IOException("boom");
+            });
+
+    assertThatThrownBy(
+            () -> client.render(
+                new ReferencedEnvelope(0.0d, 100.0d, 0.0d, 50.0d, null), 300, 300, 100, 2056, 1L))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("WMS initialization failed");
+    assertThat(client.initializationState())
+        .isEqualTo(GeometryInspectorBackgroundMapClient.InitializationState.FAILED);
+    assertThat(attempts).hasValue(1);
+
+    assertThatThrownBy(
+            () -> client.render(
+                new ReferencedEnvelope(0.0d, 100.0d, 0.0d, 50.0d, null), 300, 300, 100, 2056, 2L))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("WMS initialization failed");
+    assertThat(attempts).hasValue(1);
+
+    client.resetInitialization();
+    assertThat(client.initializationState())
+        .isEqualTo(GeometryInspectorBackgroundMapClient.InitializationState.UNINITIALIZED);
   }
 
   private static final class RecordingGetMapRequest implements GetMapRequest {

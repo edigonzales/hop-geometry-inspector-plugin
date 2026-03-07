@@ -2,6 +2,7 @@ package ch.so.agi.hop.geometry.inspector.ui;
 
 import ch.so.agi.hop.geometry.inspector.model.GeometryInspectorBackgroundMapConfig;
 import java.awt.image.BufferedImage;
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.util.ArrayList;
@@ -15,17 +16,60 @@ import org.geotools.ows.wms.response.GetMapResponse;
 
 final class GeometryInspectorBackgroundMapClient {
 
+  enum InitializationState {
+    UNINITIALIZED,
+    READY,
+    FAILED
+  }
+
+  @FunctionalInterface
+  interface WebMapServerFactory {
+    WebMapServer create(String capabilitiesUrl) throws Exception;
+  }
+
   private final GeometryInspectorBackgroundMapConfig config;
+  private final WebMapServerFactory webMapServerFactory;
 
   private WebMapServer webMapServer;
   private List<org.geotools.ows.wms.Layer> resolvedLayers;
+  private volatile InitializationState initializationState = InitializationState.UNINITIALIZED;
+  private volatile String initializationErrorMessage = "";
+  private volatile String initializationCapabilitiesUrl = "";
+  private volatile long initializationFailedAtMillis;
 
   GeometryInspectorBackgroundMapClient(GeometryInspectorBackgroundMapConfig config) {
+    this(config, capabilitiesUrl -> new WebMapServer(new URL(capabilitiesUrl)));
+  }
+
+  GeometryInspectorBackgroundMapClient(
+      GeometryInspectorBackgroundMapConfig config, WebMapServerFactory webMapServerFactory) {
     this.config = config == null ? GeometryInspectorBackgroundMapConfig.empty() : config;
+    this.webMapServerFactory = webMapServerFactory;
   }
 
   boolean isConfigured() {
     return config.isValid();
+  }
+
+  InitializationState initializationState() {
+    return initializationState;
+  }
+
+  boolean hasInitializationFailure() {
+    return initializationState == InitializationState.FAILED;
+  }
+
+  String initializationFailureMessage() {
+    return initializationErrorMessage;
+  }
+
+  void resetInitialization() {
+    webMapServer = null;
+    resolvedLayers = null;
+    initializationState = InitializationState.UNINITIALIZED;
+    initializationErrorMessage = "";
+    initializationCapabilitiesUrl = "";
+    initializationFailedAtMillis = 0L;
   }
 
   RequestParameters buildRequestParameters(
@@ -34,12 +78,14 @@ final class GeometryInspectorBackgroundMapClient {
       int logicalHeight,
       int deviceZoom,
       Integer srid) {
-    ReferencedEnvelope normalized =
+    ReferencedEnvelope renderArea =
         GeometryInspectorViewportMath.fitToCanvasAspect(displayArea, logicalWidth, logicalHeight);
     int pixelWidth = GeometryInspectorViewportMath.toPixelSize(logicalWidth, deviceZoom);
     int pixelHeight = GeometryInspectorViewportMath.toPixelSize(logicalHeight, deviceZoom);
     return new RequestParameters(
-        normalized,
+        renderArea,
+        logicalWidth,
+        logicalHeight,
         pixelWidth,
         pixelHeight,
         srid == null ? "" : "EPSG:" + srid,
@@ -79,8 +125,8 @@ final class GeometryInspectorBackgroundMapClient {
       }
       return GeometryInspectorRasterData.fromBufferedImage(
           parameters.displayArea(),
-          logicalWidth,
-          logicalHeight,
+          parameters.logicalWidth(),
+          parameters.logicalHeight(),
           deviceZoom,
           revision,
           image);
@@ -110,19 +156,43 @@ final class GeometryInspectorBackgroundMapClient {
   }
 
   private synchronized void ensureInitialized() throws Exception {
-    if (webMapServer != null && resolvedLayers != null) {
+    if (initializationState == InitializationState.READY && webMapServer != null && resolvedLayers != null) {
       return;
+    }
+    if (initializationState == InitializationState.FAILED) {
+      throw new IllegalStateException(initializationErrorMessage);
     }
 
     String capabilitiesUrl = buildCapabilitiesUrl(config.serviceUrl(), config.version());
-    webMapServer = new WebMapServer(new URL(capabilitiesUrl));
-    resolvedLayers = new ArrayList<>();
-    for (String layerName : config.parsedLayerNames()) {
-      resolvedLayers.add(
-          webMapServer.getCapabilities().getLayerList().stream()
-              .filter(layer -> layerName.equals(layer.getName()))
-              .findFirst()
-              .orElseThrow(() -> new IllegalStateException("WMS layer not found: " + layerName)));
+    try {
+      webMapServer = webMapServerFactory.create(capabilitiesUrl);
+      resolvedLayers = new ArrayList<>();
+      for (String layerName : config.parsedLayerNames()) {
+        resolvedLayers.add(
+            webMapServer.getCapabilities().getLayerList().stream()
+                .filter(layer -> layerName.equals(layer.getName()))
+                .findFirst()
+                .orElseThrow(
+                    () -> new IllegalStateException("WMS layer not found: " + layerName)));
+      }
+      initializationState = InitializationState.READY;
+      initializationErrorMessage = "";
+      initializationCapabilitiesUrl = capabilitiesUrl;
+      initializationFailedAtMillis = 0L;
+    } catch (Exception exception) {
+      initializationState = InitializationState.FAILED;
+      initializationCapabilitiesUrl = capabilitiesUrl;
+      initializationFailedAtMillis = System.currentTimeMillis();
+      initializationErrorMessage =
+          "WMS initialization failed for "
+              + capabilitiesUrl
+              + " at "
+              + initializationFailedAtMillis
+              + ": "
+              + rootCauseMessage(exception);
+      webMapServer = null;
+      resolvedLayers = null;
+      throw new IllegalStateException(initializationErrorMessage, exception);
     }
   }
 
@@ -144,6 +214,8 @@ final class GeometryInspectorBackgroundMapClient {
 
   record RequestParameters(
       ReferencedEnvelope displayArea,
+      int logicalWidth,
+      int logicalHeight,
       int pixelWidth,
       int pixelHeight,
       String srsCode,
@@ -152,4 +224,15 @@ final class GeometryInspectorBackgroundMapClient {
       String imageFormat,
       String version,
       boolean transparent) {}
+
+  private String rootCauseMessage(Throwable throwable) {
+    Throwable current = throwable;
+    while (current.getCause() != null && current.getCause() != current) {
+      current = current.getCause();
+    }
+    if (current.getMessage() == null || current.getMessage().isBlank()) {
+      return current.getClass().getSimpleName();
+    }
+    return current.getClass().getSimpleName() + ": " + current.getMessage();
+  }
 }
