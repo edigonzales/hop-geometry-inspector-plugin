@@ -56,8 +56,6 @@ public class LocalGeometryPipelineSamplerExecutor implements GeometryPipelineSam
 
     pipeline.prepareExecution();
 
-    GeometrySampleCollector outputCollector =
-        new GeometrySampleCollector(options.sampleSize(), options.mode());
     GeometrySampleCollector inputCollector =
         new GeometrySampleCollector(options.sampleSize(), options.mode());
 
@@ -65,6 +63,9 @@ public class LocalGeometryPipelineSamplerExecutor implements GeometryPipelineSam
     if (components.isEmpty()) {
       throw new HopException("No transform copies found for: " + targetTransformName);
     }
+    TargetMainOutputCapture outputCapture =
+        new TargetMainOutputCapture(options.sampleSize(), options.mode());
+    outputCapture.attach(components, targetTransformName);
 
     for (IEngineComponent component : components) {
       if (!(component instanceof ITransform transform)) {
@@ -74,22 +75,10 @@ public class LocalGeometryPipelineSamplerExecutor implements GeometryPipelineSam
       transform.addRowListener(
           new RowAdapter() {
             @Override
-            public void rowWrittenEvent(IRowMeta rowMeta, Object[] row) throws HopTransformException {
-              try {
-                outputCollector.accept(rowMeta, row);
-                if (shouldStopEarly(options, inputCollector, outputCollector)) {
-                  pipeline.stopAll();
-                }
-              } catch (Exception e) {
-                throw new HopTransformException("Failed to collect sampled row", e);
-              }
-            }
-
-            @Override
             public void rowReadEvent(IRowMeta rowMeta, Object[] row) throws HopTransformException {
               try {
                 inputCollector.accept(rowMeta, row);
-                if (shouldStopEarly(options, inputCollector, outputCollector)) {
+                if (shouldStopEarly(options, inputCollector, outputCapture)) {
                   pipeline.stopAll();
                 }
               } catch (Exception e) {
@@ -100,7 +89,7 @@ public class LocalGeometryPipelineSamplerExecutor implements GeometryPipelineSam
     }
 
     pipeline.startThreads();
-    boolean timedOut = waitForCompletion(pipeline, options);
+    boolean timedOut = waitForCompletion(pipeline, options, inputCollector, outputCapture);
     pipeline.waitUntilFinished();
 
     String reason = "";
@@ -115,8 +104,8 @@ public class LocalGeometryPipelineSamplerExecutor implements GeometryPipelineSam
 
     return samplingResultResolver.resolve(
         options.inspectionSide(),
-        outputCollector.snapshotRows(),
-        outputCollector.snapshotRowMeta(),
+        outputCapture.snapshotRows(),
+        outputCapture.snapshotRowMeta(),
         inputCollector.snapshotRows(),
         inputCollector.snapshotRowMeta(),
         partial,
@@ -126,24 +115,31 @@ public class LocalGeometryPipelineSamplerExecutor implements GeometryPipelineSam
   private boolean shouldStopEarly(
       GeometryInspectorOptions options,
       GeometrySampleCollector inputCollector,
-      GeometrySampleCollector outputCollector) {
+      TargetMainOutputCapture outputCapture) {
     if (options.mode() != SamplingMode.FIRST) {
       return false;
     }
 
     return switch (options.inspectionSide()) {
-      case AUTO, OUTPUT -> outputCollector.isFull();
+      case AUTO, OUTPUT -> outputCapture.isFull();
       case INPUT -> inputCollector.isFull();
     };
   }
 
-  private boolean waitForCompletion(LocalPipelineEngine pipeline, GeometryInspectorOptions options)
+  private boolean waitForCompletion(
+      LocalPipelineEngine pipeline,
+      GeometryInspectorOptions options,
+      GeometrySampleCollector inputCollector,
+      TargetMainOutputCapture outputCapture)
       throws InterruptedException {
     long timeoutMillis = options.timeout().toMillis();
     long start = System.currentTimeMillis();
 
     while (pipeline.isRunning() || pipeline.isPreparing()) {
       if (options.mode() == SamplingMode.FIRST) {
+        if (shouldStopEarly(options, inputCollector, outputCapture)) {
+          pipeline.stopAll();
+        }
         Thread.sleep(50L);
         continue;
       }

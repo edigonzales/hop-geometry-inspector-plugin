@@ -162,6 +162,52 @@ In short:
 - For the WMS, it uses the one common CRS detected for the whole sampled result set.
 - If there is no single consistent CRS across the sample, no WMS request is sent.
 
+## Sampling and source selection
+
+The inspector runs a preview on a pruned clone of the pipeline. All upstream transforms and the
+selected transform are kept; downstream transforms are not executed during sampling.
+
+| Option | What is sampled | Fallback behavior | Typical use |
+| --- | --- | --- | --- |
+| `Auto` | Main output rows of the selected transform. Routed or targeted main outputs are included. | If no output rows are observed, the inspector switches to input rows of the selected transform. It never mixes input and output rows in one sample. | Default choice when you want to inspect what the transform produces. |
+| `Output` | Main output rows only. Optional reject or QA target streams are not included. | No fallback. If the selected transform emits no main output rows, the inspector reports that `Output` produced no rows. | Inspect the rows that continue on the main downstream path. |
+| `Input` | Rows read by the selected transform from upstream hops. | No fallback. If the selected transform reads no rows, the inspector reports that `Input` produced no rows. | Inspect incoming geometry before the transform changes or validates it. |
+
+Notes:
+
+- `Geometry source = Output` always means the transform's main output. Reject or QA target row sets
+  are not part of the inspected sample.
+- `Geometry source = Auto` prefers output rows whenever output rows are present at runtime.
+- The `Geometry field` list follows the selected source:
+  - `Auto` shows output-side candidates when output metadata exposes geometry-compatible fields;
+    otherwise it shows input-side candidates.
+  - `Output` and `Input` restrict the field list to their respective side.
+- If the chosen geometry field is not available on the effective side at runtime, the inspector
+  auto-adjusts to a detected geometry field on that side when possible and reports that change in
+  the status line or fallback summary.
+
+## Sampling modes and completion
+
+| Mode | When preview stops | Which rows are kept | Timeout relevance |
+| --- | --- | --- | --- |
+| `FIRST` | As soon as `N` rows have been captured on the effective side, or when the preview finishes naturally before that. | The first `N` rows seen on the effective side. | Timeout only matters if the preview has not produced `N` rows yet. |
+| `LAST` | When the preview finishes naturally or when the timeout is reached. | The last `N` rows seen on the effective side. | Timeout can cut the sample short and mark it partial. |
+| `RANDOM` | When the preview finishes naturally or when the timeout is reached. | A reservoir sample of up to `N` rows from the effective side. | Timeout can cut the sample short and mark it partial. |
+
+Completion and fallback behavior:
+
+- The viewer status line and the SWT fallback summary report the sample as `full` or `partial`.
+- A timeout always marks the sample as `partial`. Error cases can also yield a partial sample on
+  non-`FIRST` collection paths.
+- Parse errors and null or empty geometries are counted and shown in the viewer status line or
+  fallback summary. They do not prevent the map from opening as long as at least one renderable
+  geometry remains.
+- The inspector shows the fallback summary instead of the map when:
+  - no sampled rows were observed on the effective side
+  - no geometry field candidates exist on the inspected side
+  - the selected geometry field yields no renderable geometries after parsing
+  - the SWT or GeoTools viewer cannot be initialized
+
 ## Troubleshooting
 
 ### Viewer does not open
