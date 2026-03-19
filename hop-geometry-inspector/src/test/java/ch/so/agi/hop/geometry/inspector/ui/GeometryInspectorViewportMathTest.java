@@ -9,8 +9,11 @@ import org.geotools.referencing.crs.DefaultGeographicCRS;
 import org.junit.jupiter.api.Test;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Envelope;
+import org.locationtech.jts.geom.GeometryFactory;
 
 class GeometryInspectorViewportMathTest {
+
+  private static final GeometryFactory GEOMETRY_FACTORY = new GeometryFactory();
 
   @Test
   void normalizesMissingWidthFromExistingHeight() {
@@ -45,6 +48,32 @@ class GeometryInspectorViewportMathTest {
     assertThat(padded.getHeight()).isEqualTo(52.0d);
     assertThat(padded.getCenterX()).isEqualTo(50.0d);
     assertThat(padded.getCenterY()).isEqualTo(25.0d);
+  }
+
+  @Test
+  void paddedFeatureExtentNormalizesPointGeometry() {
+    ReferencedEnvelope padded =
+        GeometryInspectorViewportMath.paddedFeatureExtent(
+            GEOMETRY_FACTORY.createPoint(new Coordinate(7.0d, 47.0d)), DefaultGeographicCRS.WGS84);
+
+    assertThat(padded.getWidth()).isCloseTo(0.000104d, within(1.0e-12d));
+    assertThat(padded.getHeight()).isCloseTo(0.000104d, within(1.0e-12d));
+    assertThat(padded.getCenterX()).isEqualTo(7.0d);
+    assertThat(padded.getCenterY()).isEqualTo(47.0d);
+  }
+
+  @Test
+  void paddedFeatureExtentAddsMarginForLineGeometry() {
+    ReferencedEnvelope padded =
+        GeometryInspectorViewportMath.paddedFeatureExtent(
+            GEOMETRY_FACTORY.createLineString(
+                new Coordinate[] {new Coordinate(0, 0), new Coordinate(10, 5)}),
+            null);
+
+    assertThat(padded.getMinX()).isEqualTo(-0.2d);
+    assertThat(padded.getMaxX()).isEqualTo(10.2d);
+    assertThat(padded.getMinY()).isEqualTo(-0.1d);
+    assertThat(padded.getMaxY()).isEqualTo(5.1d);
   }
 
   @Test

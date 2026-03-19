@@ -81,6 +81,7 @@ public final class GeometryInspectorToolbarIcons {
     ZOOM_OUT("zoom-out"),
     ZOOM_EXTENT("bounding-box"),
     REFRESH("arrow-clockwise"),
+    EMPHASIZE("emphasize"),
     BACKGROUND("map");
 
     private final String fileName;

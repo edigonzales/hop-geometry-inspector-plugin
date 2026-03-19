@@ -6,6 +6,7 @@ import org.geotools.api.referencing.crs.GeographicCRS;
 import org.geotools.geometry.jts.ReferencedEnvelope;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Envelope;
+import org.locationtech.jts.geom.Geometry;
 
 final class GeometryInspectorViewportMath {
 
@@ -78,6 +79,24 @@ final class GeometryInspectorViewportMath {
         normalized.getMinY() - heightPadding,
         normalized.getMaxY() + heightPadding,
         normalized.getCoordinateReferenceSystem());
+  }
+
+  static ReferencedEnvelope paddedFeatureExtent(
+      Geometry geometry, CoordinateReferenceSystem coordinateReferenceSystem) {
+    if (geometry == null) {
+      return null;
+    }
+    Envelope geometryEnvelope = geometry.getEnvelopeInternal();
+    if (geometryEnvelope == null || geometryEnvelope.isNull()) {
+      return null;
+    }
+    return paddedInitialExtent(
+        new ReferencedEnvelope(
+            geometryEnvelope.getMinX(),
+            geometryEnvelope.getMaxX(),
+            geometryEnvelope.getMinY(),
+            geometryEnvelope.getMaxY(),
+            coordinateReferenceSystem));
   }
 
   static ReferencedEnvelope fitToCanvasAspect(

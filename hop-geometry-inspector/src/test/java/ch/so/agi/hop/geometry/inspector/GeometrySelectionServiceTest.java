@@ -19,35 +19,80 @@ class GeometrySelectionServiceTest {
   private final GeometryFactory geometryFactory = new GeometryFactory();
 
   @Test
-  void selectsNearestFeatureInsidePickEnvelope() {
-    SimpleFeature nearPoint = createFeature("feature-0", geometryFactory.createPoint(new Coordinate(0, 0)), 0);
-    SimpleFeature farPoint = createFeature("feature-1", geometryFactory.createPoint(new Coordinate(4, 4)), 1);
+  void ranksPointHitsAheadOfPolygonHits() {
+    SimpleFeature polygon =
+        createFeature(
+            "feature-0",
+            geometryFactory.createPolygon(
+                new Coordinate[] {
+                  new Coordinate(-2, -2),
+                  new Coordinate(2, -2),
+                  new Coordinate(2, 2),
+                  new Coordinate(-2, 2),
+                  new Coordinate(-2, -2)
+                }),
+            0);
+    SimpleFeature point = createFeature("feature-1", geometryFactory.createPoint(new Coordinate(0, 0)), 1);
 
-    SimpleFeature selected =
-        selectionService
-            .selectFeature(
-                List.of(farPoint, nearPoint),
-                new Coordinate(0.4, 0.3),
-                new Envelope(-1, 5, -1, 5))
-            .orElseThrow();
+    List<GeometrySelectionService.SelectionCandidate> candidates =
+        selectionService.rankHits(List.of(polygon, point), new Coordinate(0, 0), new Envelope(-1, 1, -1, 1));
 
-    assertThat(selected.getID()).isEqualTo("feature-0");
+    assertThat(candidates).hasSize(2);
+    assertThat(candidates.get(0).feature().getID()).isEqualTo("feature-1");
+    assertThat(candidates.get(1).feature().getID()).isEqualTo("feature-0");
   }
 
   @Test
-  void breaksDistanceTiesByLowestRowIndex() {
+  void breaksDistanceTiesByLowestRowIndexWithinSameGeometryPriority() {
     SimpleFeature first = createFeature("feature-10", geometryFactory.createPoint(new Coordinate(1, 0)), 10);
     SimpleFeature second = createFeature("feature-3", geometryFactory.createPoint(new Coordinate(-1, 0)), 3);
 
-    SimpleFeature selected =
-        selectionService
-            .selectFeature(
-                List.of(first, second),
-                new Coordinate(0, 0),
-                new Envelope(-2, 2, -2, 2))
-            .orElseThrow();
+    List<GeometrySelectionService.SelectionCandidate> candidates =
+        selectionService.rankHits(List.of(first, second), new Coordinate(0, 0), new Envelope(-2, 2, -2, 2));
 
-    assertThat(selected.getID()).isEqualTo("feature-3");
+    assertThat(candidates).hasSize(2);
+    assertThat(candidates.get(0).feature().getID()).isEqualTo("feature-3");
+    assertThat(selectionService.selectFeature(List.of(first, second), new Coordinate(0, 0), new Envelope(-2, 2, -2, 2)))
+        .get()
+        .extracting(SimpleFeature::getID)
+        .isEqualTo("feature-3");
+  }
+
+  @Test
+  void detectsAmbiguousTopHitForOverlappingPolygons() {
+    SimpleFeature first =
+        createFeature(
+            "feature-0",
+            geometryFactory.createPolygon(
+                new Coordinate[] {
+                  new Coordinate(0, 0),
+                  new Coordinate(4, 0),
+                  new Coordinate(4, 4),
+                  new Coordinate(0, 4),
+                  new Coordinate(0, 0)
+                }),
+            0);
+    SimpleFeature second =
+        createFeature(
+            "feature-1",
+            geometryFactory.createPolygon(
+                new Coordinate[] {
+                  new Coordinate(1, 1),
+                  new Coordinate(5, 1),
+                  new Coordinate(5, 5),
+                  new Coordinate(1, 5),
+                  new Coordinate(1, 1)
+                }),
+            1);
+
+    List<GeometrySelectionService.SelectionCandidate> candidates =
+        selectionService.rankHits(List.of(second, first), new Coordinate(2, 2), new Envelope(1.5, 2.5, 1.5, 2.5));
+
+    assertThat(candidates).hasSize(2);
+    assertThat(candidates.get(0).distance()).isZero();
+    assertThat(candidates.get(1).distance()).isZero();
+    assertThat(candidates.get(0).feature().getID()).isEqualTo("feature-0");
+    assertThat(selectionService.hasAmbiguousTopHit(candidates)).isTrue();
   }
 
   @Test
@@ -65,10 +110,9 @@ class GeometrySelectionServiceTest {
                 }),
             0);
 
-    assertThat(
-            selectionService.selectFeature(
-                List.of(polygon), new Coordinate(0, 0), new Envelope(-1, 1, -1, 1)))
+    assertThat(selectionService.rankHits(List.of(polygon), new Coordinate(0, 0), new Envelope(-1, 1, -1, 1)))
         .isEmpty();
+    assertThat(selectionService.hasAmbiguousTopHit(List.of())).isFalse();
   }
 
   private SimpleFeature createFeature(String id, Geometry geometry, int rowIndex) {
