@@ -122,6 +122,7 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
   private String overlayStatus = "idle";
   private String backgroundStatus = "off";
   private String backgroundErrorMessage = "";
+  private List<String[]> attributeClipboardRows = List.of();
   private boolean updatingFeatureTableSelection;
   private boolean closed;
 
@@ -992,6 +993,7 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
   private void clearSelectionPanel() {
     selectionSummaryLabel.setText("No feature selected");
     attributeTable.removeAll();
+    attributeClipboardRows = List.of();
     geometryDetailText.setText("");
   }
 
@@ -1161,43 +1163,32 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
       GeometryInspectorFeatureTableModel.Entry entry, int columnCount) {
     String[] values = new String[Math.max(0, columnCount)];
     for (int columnIndex = 0; columnIndex < values.length; columnIndex++) {
-      values[columnIndex] = entry.cellValueAt(columnIndex);
+      values[columnIndex] = entry.clipboardCellValueAt(columnIndex);
     }
     return joinCellsWithTabs(values);
   }
 
-  private static String formatTableSelectionForClipboard(Table table) {
-    if (table == null || table.isDisposed()) {
-      return "";
-    }
-    int[] selectionIndices = table.getSelectionIndices();
-    if (selectionIndices.length == 0) {
+  static String formatAttributeSelectionForClipboard(
+      List<String[]> clipboardRows, int[] selectionIndices) {
+    if (clipboardRows == null
+        || clipboardRows.isEmpty()
+        || selectionIndices == null
+        || selectionIndices.length == 0) {
       return "";
     }
     int[] sortedDistinctSelection = Arrays.stream(selectionIndices).sorted().distinct().toArray();
-    int columnCount = Math.max(1, table.getColumnCount());
     StringBuilder builder = new StringBuilder();
     for (int rowIndex : sortedDistinctSelection) {
-      if (rowIndex < 0 || rowIndex >= table.getItemCount()) {
+      if (rowIndex < 0 || rowIndex >= clipboardRows.size()) {
         continue;
       }
       if (builder.length() > 0) {
         builder.append(System.lineSeparator());
       }
-      builder.append(formatTableItemForClipboard(table.getItem(rowIndex), columnCount));
+      String[] rowValues = clipboardRows.get(rowIndex);
+      builder.append(joinCellsWithTabs(rowValues == null ? new String[0] : rowValues));
     }
     return builder.toString();
-  }
-
-  private static String formatTableItemForClipboard(TableItem item, int columnCount) {
-    if (columnCount <= 1) {
-      return item.getText();
-    }
-    String[] values = new String[columnCount];
-    for (int columnIndex = 0; columnIndex < columnCount; columnIndex++) {
-      values[columnIndex] = item.getText(columnIndex);
-    }
-    return joinCellsWithTabs(values);
   }
 
   private static String joinCellsWithTabs(String[] values) {
@@ -1281,7 +1272,8 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
   }
 
   private void copyAttributeTableSelectionToClipboard() {
-    copyTextToClipboard(formatTableSelectionForClipboard(attributeTable));
+    int[] selectionIndices = attributeTable == null ? new int[0] : attributeTable.getSelectionIndices();
+    copyTextToClipboard(formatAttributeSelectionForClipboard(attributeClipboardRows, selectionIndices));
   }
 
   private void copyGeometryDetailToClipboard() {
@@ -1408,18 +1400,20 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
             ? samplingResult.rows().get(rowIndex)
             : new Object[0];
     IRowMeta rowMeta = samplingResult.rowMeta();
+    List<String[]> nextAttributeClipboardRows = new ArrayList<>();
 
     if (rowMeta != null) {
       for (int index = 0; index < rowMeta.size(); index++) {
         IValueMeta valueMeta = rowMeta.getValueMeta(index);
         Object value = row.length > index ? row[index] : null;
+        String formatted = formatValue(valueMeta, value);
+        nextAttributeClipboardRows.add(new String[] {valueMeta.getName(), formatted});
         TableItem item = new TableItem(attributeTable, SWT.NONE);
         item.setText(
-            new String[] {
-              valueMeta.getName(), abbreviate(formatValue(valueMeta, value), MAX_TABLE_VALUE_LENGTH)
-            });
+            new String[] {valueMeta.getName(), abbreviate(formatted, MAX_TABLE_VALUE_LENGTH)});
       }
     }
+    attributeClipboardRows = List.copyOf(nextAttributeClipboardRows);
 
     String geometryType = geometry == null ? "n/a" : geometry.getGeometryType();
     int srid = geometry == null ? 0 : geometry.getSRID();

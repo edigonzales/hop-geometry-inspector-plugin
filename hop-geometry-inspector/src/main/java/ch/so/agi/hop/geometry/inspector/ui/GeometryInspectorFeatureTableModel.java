@@ -126,12 +126,14 @@ final class GeometryInspectorFeatureTableModel {
           rowIndex >= 0 && rowIndex < samplingResult.rows().size()
               ? samplingResult.rows().get(rowIndex)
               : new Object[0];
-      List<String> cellValues = buildCellValues(rowMeta, rowIndex, row);
+      List<String> displayCellValues = buildCellValues(rowMeta, rowIndex, row, true);
+      List<String> clipboardCellValues = buildCellValues(rowMeta, rowIndex, row, false);
       nextEntries.add(
           new Entry(
               feature,
               rowIndex,
-              cellValues,
+              displayCellValues,
+              clipboardCellValues,
               buildHitLabel(rowMeta, row, geometryFieldIndex, geometry, rowIndex)));
     }
 
@@ -167,7 +169,8 @@ final class GeometryInspectorFeatureTableModel {
     return index;
   }
 
-  private List<String> buildCellValues(IRowMeta rowMeta, int rowIndex, Object[] row) {
+  private List<String> buildCellValues(
+      IRowMeta rowMeta, int rowIndex, Object[] row, boolean abbreviateValues) {
     List<String> values = new ArrayList<>(columns.size());
     values.add(String.valueOf(rowIndex));
     if (rowMeta == null) {
@@ -176,7 +179,8 @@ final class GeometryInspectorFeatureTableModel {
     for (int index = 0; index < rowMeta.size(); index++) {
       IValueMeta valueMeta = rowMeta.getValueMeta(index);
       Object value = row.length > index ? row[index] : null;
-      values.add(abbreviate(formatValue(valueMeta, value), MAX_CELL_VALUE_LENGTH));
+      String formatted = formatValue(valueMeta, value);
+      values.add(abbreviateValues ? abbreviate(formatted, MAX_CELL_VALUE_LENGTH) : formatted);
     }
     return values;
   }
@@ -270,13 +274,25 @@ final class GeometryInspectorFeatureTableModel {
     }
   }
 
-  record Entry(SimpleFeature feature, int rowIndex, List<String> cellValues, String popupLabel) {
+  record Entry(
+      SimpleFeature feature,
+      int rowIndex,
+      List<String> cellValues,
+      List<String> clipboardCellValues,
+      String popupLabel) {
 
     String cellValueAt(int columnIndex) {
       if (columnIndex < 0 || columnIndex >= cellValues.size()) {
         return "";
       }
       return cellValues.get(columnIndex);
+    }
+
+    String clipboardCellValueAt(int columnIndex) {
+      if (columnIndex < 0 || columnIndex >= clipboardCellValues.size()) {
+        return "";
+      }
+      return clipboardCellValues.get(columnIndex);
     }
 
     String hitLabel() {

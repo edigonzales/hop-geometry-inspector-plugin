@@ -87,6 +87,26 @@ class GeometryInspectorFeatureTableModelTest {
   }
 
   @Test
+  void keepsUiCellValuesAbbreviatedButClipboardValuesComplete() {
+    RowMeta rowMeta = new RowMeta();
+    rowMeta.addValueMeta(new ValueMetaString("name"));
+    rowMeta.addValueMeta(new ValueMetaString("geom_wkt"));
+
+    String longName = "n".repeat(GeometryInspectorFeatureTableModel.MAX_CELL_VALUE_LENGTH + 40);
+    List<Object[]> rows = List.<Object[]>of(new Object[] {longName, "POINT (1 2)"});
+
+    GeometryBuildResult buildResult = featureBuilder.build(rowMeta, rows, "geom_wkt");
+    GeometryInspectorFeatureTableModel model =
+        new GeometryInspectorFeatureTableModel(
+            samplingResult(rows, rowMeta), buildResult, "geom_wkt");
+
+    assertThat(model.entryAt(0).cellValueAt(1)).endsWith("...");
+    assertThat(model.entryAt(0).cellValueAt(1))
+        .hasSize(GeometryInspectorFeatureTableModel.MAX_CELL_VALUE_LENGTH);
+    assertThat(model.entryAt(0).clipboardCellValueAt(1)).isEqualTo(longName);
+  }
+
+  @Test
   void resolvesEntryByFeatureIdWhenRowIndexIsMissing() {
     RowMeta rowMeta = new RowMeta();
     rowMeta.addValueMeta(new ValueMetaString("name"));

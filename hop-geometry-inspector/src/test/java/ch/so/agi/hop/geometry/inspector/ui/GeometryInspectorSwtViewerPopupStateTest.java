@@ -93,6 +93,46 @@ class GeometryInspectorSwtViewerPopupStateTest {
   }
 
   @Test
+  void formatFeatureTableSelectionForClipboardUsesFullValuesWithoutEllipsis() {
+    RowMeta rowMeta = new RowMeta();
+    rowMeta.addValueMeta(new ValueMetaString("name"));
+    rowMeta.addValueMeta(new ValueMetaString("geom_wkt"));
+    String longName = "x".repeat(GeometryInspectorFeatureTableModel.MAX_CELL_VALUE_LENGTH + 24);
+    List<Object[]> rows = List.<Object[]>of(new Object[] {longName, "POINT (1 2)"});
+    GeometryBuildResult buildResult = featureBuilder.build(rowMeta, rows, "geom_wkt");
+    GeometryInspectorFeatureTableModel model =
+        new GeometryInspectorFeatureTableModel(
+            samplingResult(rows, rowMeta), buildResult, "geom_wkt");
+
+    String clipboardContent =
+        GeometryInspectorSwtViewer.formatFeatureTableSelectionForClipboard(model, new int[] {0});
+
+    assertThat(clipboardContent).isEqualTo("0\t" + longName + "\tPOINT (1 2)");
+    assertThat(clipboardContent).doesNotContain("...");
+  }
+
+  @Test
+  void formatAttributeSelectionForClipboardUsesFullValuesWithoutEllipsis() {
+    String longValue = "v".repeat(GeometryInspectorFeatureTableModel.MAX_CELL_VALUE_LENGTH + 32);
+
+    String clipboardContent =
+        GeometryInspectorSwtViewer.formatAttributeSelectionForClipboard(
+            List.<String[]>of(new String[] {"name", longValue}), new int[] {0});
+
+    assertThat(clipboardContent).isEqualTo("name\t" + longValue);
+    assertThat(clipboardContent).doesNotContain("...");
+  }
+
+  @Test
+  void formatAttributeSelectionForClipboardReturnsEmptyWhenSelectionIsMissing() {
+    String clipboardContent =
+        GeometryInspectorSwtViewer.formatAttributeSelectionForClipboard(
+            List.<String[]>of(new String[] {"name", "value"}), new int[0]);
+
+    assertThat(clipboardContent).isEmpty();
+  }
+
+  @Test
   void formatFeatureTableSelectionForClipboardReturnsEmptyWhenSelectionIsMissing() {
     GeometryInspectorFeatureTableModel model = testModel();
 
@@ -103,14 +143,21 @@ class GeometryInspectorSwtViewerPopupStateTest {
   }
 
   private GeometryInspectorFeatureTableModel testModel() {
+    return testModel(
+        List.<Object[]>of(
+            new Object[] {"alpha", "POINT (1 2)"},
+            new Object[] {"beta", "POINT (3 4)"}));
+  }
+
+  private GeometryInspectorFeatureTableModel testModel(List<Object[]> rows) {
     RowMeta rowMeta = new RowMeta();
     rowMeta.addValueMeta(new ValueMetaString("name"));
     rowMeta.addValueMeta(new ValueMetaString("geom_wkt"));
-    List<Object[]> rows =
-        List.of(
-            new Object[] {"alpha", "POINT (1 2)"},
-            new Object[] {"beta", "POINT (3 4)"});
     GeometryBuildResult buildResult = featureBuilder.build(rowMeta, rows, "geom_wkt");
+    return new GeometryInspectorFeatureTableModel(samplingResult(rows, rowMeta), buildResult, "geom_wkt");
+  }
+
+  private SamplingResult samplingResult(List<Object[]> rows, RowMeta rowMeta) {
     SamplingResult samplingResult =
         new SamplingResult(
             rows,
@@ -121,6 +168,6 @@ class GeometryInspectorSwtViewerPopupStateTest {
             GeometryInspectionSide.OUTPUT,
             false,
             "");
-    return new GeometryInspectorFeatureTableModel(samplingResult, buildResult, "geom_wkt");
+    return samplingResult;
   }
 }
