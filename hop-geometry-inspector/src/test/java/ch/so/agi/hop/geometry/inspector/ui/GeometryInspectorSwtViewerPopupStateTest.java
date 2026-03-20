@@ -78,6 +78,30 @@ class GeometryInspectorSwtViewerPopupStateTest {
     assertThat(selectionIndex).isEqualTo(0);
   }
 
+  @Test
+  void formatFeatureTableSelectionForClipboardUsesTabSeparatedCellValues() {
+    GeometryInspectorFeatureTableModel model = testModel();
+
+    String clipboardContent =
+        GeometryInspectorSwtViewer.formatFeatureTableSelectionForClipboard(model, new int[] {1, 0});
+
+    assertThat(clipboardContent)
+        .isEqualTo(
+            "0\talpha\tPOINT (1 2)"
+                + System.lineSeparator()
+                + "1\tbeta\tPOINT (3 4)");
+  }
+
+  @Test
+  void formatFeatureTableSelectionForClipboardReturnsEmptyWhenSelectionIsMissing() {
+    GeometryInspectorFeatureTableModel model = testModel();
+
+    String clipboardContent =
+        GeometryInspectorSwtViewer.formatFeatureTableSelectionForClipboard(model, new int[0]);
+
+    assertThat(clipboardContent).isEmpty();
+  }
+
   private GeometryInspectorFeatureTableModel testModel() {
     RowMeta rowMeta = new RowMeta();
     rowMeta.addValueMeta(new ValueMetaString("name"));

@@ -13,6 +13,7 @@ import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -20,6 +21,9 @@ import org.apache.hop.core.row.IRowMeta;
 import org.apache.hop.core.row.IValueMeta;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.SashForm;
+import org.eclipse.swt.dnd.Clipboard;
+import org.eclipse.swt.dnd.TextTransfer;
+import org.eclipse.swt.dnd.Transfer;
 import org.eclipse.swt.graphics.GC;
 import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.graphics.Point;
@@ -49,6 +53,7 @@ import org.geotools.map.Layer;
 import org.geotools.map.MapContent;
 import org.geotools.renderer.lite.StreamingRenderer;
 import org.geotools.styling.SLD;
+import org.geotools.styling.StyleBuilder;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Envelope;
 import org.locationtech.jts.geom.Geometry;
@@ -70,6 +75,8 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
   private static final float DEFAULT_LINE_WIDTH = 2.2f;
   private static final float EMPHASIZED_LINE_WIDTH = 4.5f;
   private static final float HIGHLIGHT_LINE_WIDTH = 5.5f;
+  private static final float DEFAULT_POLYGON_STROKE_WIDTH = 2.2f;
+  private static final float EMPHASIZED_POLYGON_STROKE_WIDTH = 4.5f;
 
   private enum ViewportRefreshMode {
     PREVIEW_ONLY,
@@ -324,6 +331,11 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
           }
           updateSelection(featureTableModel.entryAt(selectionIndex).feature(), true);
         });
+    installTableCopySupport(
+        featureTable, this::copyFeatureTableSelectionToClipboard, "Copy selected row(s)");
+    installTableCopySupport(
+        attributeTable, this::copyAttributeTableSelectionToClipboard, "Copy selected row(s)");
+    installGeometryTextCopySupport();
 
     mapCanvas.addListener(SWT.Paint, this::paintMapCanvas);
     mapCanvas.addListener(
@@ -833,7 +845,11 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
     }
 
     addLayerIfNotEmpty(
-        targetMapContent, polygonFeatures, featureType, createPolygonStyle(), "Polygons");
+        targetMapContent,
+        polygonFeatures,
+        featureType,
+        createPolygonStyle(emphasizeSmallFeatures),
+        "Polygons");
     addLayerIfNotEmpty(
         targetMapContent,
         lineFeatures,
@@ -877,8 +893,16 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
         emphasizeSmallFeatures ? EMPHASIZED_LINE_WIDTH : DEFAULT_LINE_WIDTH);
   }
 
-  private Style createPolygonStyle() {
-    return SLD.createPolygonStyle(new Color(253, 174, 97), new Color(49, 54, 149), 0.48f);
+  static Style createPolygonStyle(boolean emphasizeSmallFeatures) {
+    StyleBuilder styleBuilder = new StyleBuilder();
+    return styleBuilder.createStyle(
+        styleBuilder.createPolygonSymbolizer(
+            styleBuilder.createStroke(
+                new Color(49, 54, 149),
+                emphasizeSmallFeatures
+                    ? EMPHASIZED_POLYGON_STROKE_WIDTH
+                    : DEFAULT_POLYGON_STROKE_WIDTH),
+            styleBuilder.createFill(new Color(253, 174, 97), 0.48d)));
   }
 
   static Style createHighlightStyle(Geometry geometry) {
@@ -1111,6 +1135,176 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
 
   static boolean shouldRequestPopupMenuVisibilityClose(boolean menuVisible) {
     return menuVisible;
+  }
+
+  static String formatFeatureTableSelectionForClipboard(
+      GeometryInspectorFeatureTableModel tableModel, int[] selectionIndices) {
+    if (tableModel == null || selectionIndices == null || selectionIndices.length == 0) {
+      return "";
+    }
+    int[] sortedDistinctSelection = Arrays.stream(selectionIndices).sorted().distinct().toArray();
+    StringBuilder builder = new StringBuilder();
+    for (int tableIndex : sortedDistinctSelection) {
+      if (tableIndex < 0 || tableIndex >= tableModel.size()) {
+        continue;
+      }
+      if (builder.length() > 0) {
+        builder.append(System.lineSeparator());
+      }
+      GeometryInspectorFeatureTableModel.Entry entry = tableModel.entryAt(tableIndex);
+      builder.append(formatFeatureEntryForClipboard(entry, tableModel.columnCount()));
+    }
+    return builder.toString();
+  }
+
+  private static String formatFeatureEntryForClipboard(
+      GeometryInspectorFeatureTableModel.Entry entry, int columnCount) {
+    String[] values = new String[Math.max(0, columnCount)];
+    for (int columnIndex = 0; columnIndex < values.length; columnIndex++) {
+      values[columnIndex] = entry.cellValueAt(columnIndex);
+    }
+    return joinCellsWithTabs(values);
+  }
+
+  private static String formatTableSelectionForClipboard(Table table) {
+    if (table == null || table.isDisposed()) {
+      return "";
+    }
+    int[] selectionIndices = table.getSelectionIndices();
+    if (selectionIndices.length == 0) {
+      return "";
+    }
+    int[] sortedDistinctSelection = Arrays.stream(selectionIndices).sorted().distinct().toArray();
+    int columnCount = Math.max(1, table.getColumnCount());
+    StringBuilder builder = new StringBuilder();
+    for (int rowIndex : sortedDistinctSelection) {
+      if (rowIndex < 0 || rowIndex >= table.getItemCount()) {
+        continue;
+      }
+      if (builder.length() > 0) {
+        builder.append(System.lineSeparator());
+      }
+      builder.append(formatTableItemForClipboard(table.getItem(rowIndex), columnCount));
+    }
+    return builder.toString();
+  }
+
+  private static String formatTableItemForClipboard(TableItem item, int columnCount) {
+    if (columnCount <= 1) {
+      return item.getText();
+    }
+    String[] values = new String[columnCount];
+    for (int columnIndex = 0; columnIndex < columnCount; columnIndex++) {
+      values[columnIndex] = item.getText(columnIndex);
+    }
+    return joinCellsWithTabs(values);
+  }
+
+  private static String joinCellsWithTabs(String[] values) {
+    StringBuilder builder = new StringBuilder();
+    for (int columnIndex = 0; columnIndex < values.length; columnIndex++) {
+      if (columnIndex > 0) {
+        builder.append('\t');
+      }
+      String value = values[columnIndex];
+      builder.append(value == null ? "" : value);
+    }
+    return builder.toString();
+  }
+
+  private static boolean isCopyShortcut(Event event) {
+    if (event == null) {
+      return false;
+    }
+    boolean commandOrControl = (event.stateMask & SWT.MOD1) != 0;
+    if (!commandOrControl) {
+      return false;
+    }
+    return event.keyCode == 'c'
+        || event.keyCode == 'C'
+        || event.character == 'c'
+        || event.character == 'C';
+  }
+
+  private void installTableCopySupport(Table table, Runnable copyAction, String menuLabel) {
+    table.addListener(
+        SWT.KeyDown,
+        event -> {
+          if (!isCopyShortcut(event)) {
+            return;
+          }
+          copyAction.run();
+          event.doit = false;
+        });
+
+    Menu copyMenu = new Menu(table);
+    MenuItem copyItem = new MenuItem(copyMenu, SWT.PUSH);
+    copyItem.setText(menuLabel);
+    copyItem.addListener(SWT.Selection, event -> copyAction.run());
+    copyMenu.addListener(SWT.Show, event -> copyItem.setEnabled(table.getSelectionCount() > 0));
+    table.setMenu(copyMenu);
+  }
+
+  private void installGeometryTextCopySupport() {
+    geometryDetailText.addListener(
+        SWT.KeyDown,
+        event -> {
+          if (!isCopyShortcut(event)) {
+            return;
+          }
+          copyGeometryDetailToClipboard();
+          event.doit = false;
+        });
+
+    Menu textMenu = new Menu(geometryDetailText);
+    MenuItem copyItem = new MenuItem(textMenu, SWT.PUSH);
+    copyItem.setText("Copy");
+    copyItem.addListener(SWT.Selection, event -> copyGeometryDetailToClipboard());
+    MenuItem selectAllItem = new MenuItem(textMenu, SWT.PUSH);
+    selectAllItem.setText("Select all");
+    selectAllItem.addListener(SWT.Selection, event -> geometryDetailText.selectAll());
+    textMenu.addListener(
+        SWT.Show,
+        event -> {
+          boolean hasText = !geometryDetailText.getText().isBlank();
+          copyItem.setEnabled(hasText);
+          selectAllItem.setEnabled(hasText);
+        });
+    geometryDetailText.setMenu(textMenu);
+  }
+
+  private void copyFeatureTableSelectionToClipboard() {
+    String content =
+        formatFeatureTableSelectionForClipboard(
+            featureTableModel, featureTable == null ? new int[0] : featureTable.getSelectionIndices());
+    copyTextToClipboard(content);
+  }
+
+  private void copyAttributeTableSelectionToClipboard() {
+    copyTextToClipboard(formatTableSelectionForClipboard(attributeTable));
+  }
+
+  private void copyGeometryDetailToClipboard() {
+    if (geometryDetailText == null || geometryDetailText.isDisposed()) {
+      return;
+    }
+    String selectedText = geometryDetailText.getSelectionText();
+    if (selectedText == null || selectedText.isBlank()) {
+      selectedText = geometryDetailText.getText();
+    }
+    copyTextToClipboard(selectedText);
+  }
+
+  private void copyTextToClipboard(String value) {
+    if (value == null || value.isBlank() || shell.isDisposed()) {
+      return;
+    }
+    Clipboard clipboard = new Clipboard(shell.getDisplay());
+    try {
+      clipboard.setContents(new Object[] {value}, new Transfer[] {TextTransfer.getInstance()});
+    } finally {
+      clipboard.dispose();
+    }
   }
 
   private void commitHitCandidate(SimpleFeature feature) {

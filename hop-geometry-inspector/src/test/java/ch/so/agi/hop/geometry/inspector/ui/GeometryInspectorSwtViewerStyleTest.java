@@ -57,4 +57,17 @@ class GeometryInspectorSwtViewerStyleTest {
     assertThat(SLD.stroke(highlightLineSymbolizer).getWidth().evaluate(null, Double.class))
         .isCloseTo(5.5d, within(1.0e-6d));
   }
+
+  @Test
+  void polygonStylesUseExpectedOutlineWidths() {
+    var defaultPolygonSymbolizer =
+        SLD.polySymbolizer(GeometryInspectorSwtViewer.createPolygonStyle(false));
+    var emphasizedPolygonSymbolizer =
+        SLD.polySymbolizer(GeometryInspectorSwtViewer.createPolygonStyle(true));
+
+    assertThat(SLD.stroke(defaultPolygonSymbolizer).getWidth().evaluate(null, Double.class))
+        .isCloseTo(2.2d, within(1.0e-6d));
+    assertThat(SLD.stroke(emphasizedPolygonSymbolizer).getWidth().evaluate(null, Double.class))
+        .isCloseTo(4.5d, within(1.0e-6d));
+  }
 }
