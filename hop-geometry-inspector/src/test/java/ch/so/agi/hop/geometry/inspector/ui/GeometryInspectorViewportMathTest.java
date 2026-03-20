@@ -14,6 +14,8 @@ import org.locationtech.jts.geom.GeometryFactory;
 class GeometryInspectorViewportMathTest {
 
   private static final GeometryFactory GEOMETRY_FACTORY = new GeometryFactory();
+  private static final double POINT_HALF_SPAN_METERS = 20.0d;
+  private static final double METERS_PER_DEGREE_LAT = 111_320.0d;
 
   @Test
   void normalizesMissingWidthFromExistingHeight() {
@@ -51,15 +53,45 @@ class GeometryInspectorViewportMathTest {
   }
 
   @Test
-  void paddedFeatureExtentNormalizesPointGeometry() {
+  void paddedFeatureExtentUsesFixedSelectionBoxForProjectedPointGeometry() {
+    ReferencedEnvelope padded =
+        GeometryInspectorViewportMath.paddedFeatureExtent(
+            GEOMETRY_FACTORY.createPoint(new Coordinate(2_600_000.0d, 1_200_000.0d)), null);
+
+    assertThat(padded.getWidth()).isEqualTo(40.0d);
+    assertThat(padded.getHeight()).isEqualTo(40.0d);
+    assertThat(padded.getCenterX()).isEqualTo(2_600_000.0d);
+    assertThat(padded.getCenterY()).isEqualTo(1_200_000.0d);
+  }
+
+  @Test
+  void paddedFeatureExtentUsesFixedSelectionBoxForGeographicPointGeometry() {
     ReferencedEnvelope padded =
         GeometryInspectorViewportMath.paddedFeatureExtent(
             GEOMETRY_FACTORY.createPoint(new Coordinate(7.0d, 47.0d)), DefaultGeographicCRS.WGS84);
 
-    assertThat(padded.getWidth()).isCloseTo(0.000104d, within(1.0e-12d));
-    assertThat(padded.getHeight()).isCloseTo(0.000104d, within(1.0e-12d));
+    double expectedHalfLatDegrees = POINT_HALF_SPAN_METERS / METERS_PER_DEGREE_LAT;
+    double expectedHalfLonDegrees =
+        POINT_HALF_SPAN_METERS / (METERS_PER_DEGREE_LAT * Math.cos(Math.toRadians(47.0d)));
+
+    assertThat(padded.getWidth()).isCloseTo(expectedHalfLonDegrees * 2.0d, within(1.0e-12d));
+    assertThat(padded.getHeight()).isCloseTo(expectedHalfLatDegrees * 2.0d, within(1.0e-12d));
     assertThat(padded.getCenterX()).isEqualTo(7.0d);
     assertThat(padded.getCenterY()).isEqualTo(47.0d);
+  }
+
+  @Test
+  void paddedFeatureExtentUsesFixedSelectionBoxForMultiPointGeometry() {
+    ReferencedEnvelope padded =
+        GeometryInspectorViewportMath.paddedFeatureExtent(
+            GEOMETRY_FACTORY.createMultiPoint(
+                new Coordinate[] {new Coordinate(100.0d, 200.0d), new Coordinate(102.0d, 198.0d)}),
+            null);
+
+    assertThat(padded.getWidth()).isEqualTo(40.0d);
+    assertThat(padded.getHeight()).isEqualTo(40.0d);
+    assertThat(padded.getCenterX()).isEqualTo(101.0d);
+    assertThat(padded.getCenterY()).isEqualTo(199.0d);
   }
 
   @Test

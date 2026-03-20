@@ -4,9 +4,11 @@ import java.awt.Rectangle;
 import org.geotools.api.referencing.crs.CoordinateReferenceSystem;
 import org.geotools.api.referencing.crs.GeographicCRS;
 import org.geotools.geometry.jts.ReferencedEnvelope;
+import org.geotools.referencing.CRS;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Envelope;
 import org.locationtech.jts.geom.Geometry;
+import org.locationtech.jts.geom.Puntal;
 
 final class GeometryInspectorViewportMath {
 
@@ -16,6 +18,8 @@ final class GeometryInspectorViewportMath {
   private static final double DEFAULT_POINT_SPAN = 1.0d;
   private static final double INITIAL_PADDING_RATIO = 0.02d;
   private static final double ASPECT_EPSILON = 1.0e-9d;
+  private static final double FIXED_POINT_SELECTION_HALF_SPAN_METERS = 20.0d;
+  private static final double METERS_PER_DEGREE_LAT = 111_320.0d;
 
   private GeometryInspectorViewportMath() {}
 
@@ -89,6 +93,27 @@ final class GeometryInspectorViewportMath {
     Envelope geometryEnvelope = geometry.getEnvelopeInternal();
     if (geometryEnvelope == null || geometryEnvelope.isNull()) {
       return null;
+    }
+    if (geometry instanceof Puntal) {
+      Coordinate center = geometryEnvelope.centre();
+      if (center == null || !Double.isFinite(center.x) || !Double.isFinite(center.y)) {
+        return null;
+      }
+      CoordinateReferenceSystem resolvedCrs =
+          resolveSelectionCoordinateReferenceSystem(coordinateReferenceSystem, geometry);
+      double halfSpanX = FIXED_POINT_SELECTION_HALF_SPAN_METERS;
+      double halfSpanY = FIXED_POINT_SELECTION_HALF_SPAN_METERS;
+      if (resolvedCrs instanceof GeographicCRS) {
+        halfSpanY = metersToLatitudeDegrees(FIXED_POINT_SELECTION_HALF_SPAN_METERS);
+        halfSpanX = metersToLongitudeDegrees(FIXED_POINT_SELECTION_HALF_SPAN_METERS, center.y);
+      }
+      return normalizeExtent(
+          new ReferencedEnvelope(
+              center.x - halfSpanX,
+              center.x + halfSpanX,
+              center.y - halfSpanY,
+              center.y + halfSpanY,
+              resolvedCrs));
     }
     return paddedInitialExtent(
         new ReferencedEnvelope(
@@ -416,5 +441,33 @@ final class GeometryInspectorViewportMath {
       return GEOGRAPHIC_POINT_SPAN;
     }
     return DEFAULT_POINT_SPAN;
+  }
+
+  private static CoordinateReferenceSystem resolveSelectionCoordinateReferenceSystem(
+      CoordinateReferenceSystem coordinateReferenceSystem, Geometry geometry) {
+    if (coordinateReferenceSystem != null) {
+      return coordinateReferenceSystem;
+    }
+    if (geometry == null || geometry.getSRID() <= 0) {
+      return null;
+    }
+    try {
+      return CRS.decode("EPSG:" + geometry.getSRID(), true);
+    } catch (Exception ignored) {
+      return null;
+    }
+  }
+
+  private static double metersToLatitudeDegrees(double meters) {
+    return Math.max(meters / METERS_PER_DEGREE_LAT, ABS_MIN_SPAN);
+  }
+
+  private static double metersToLongitudeDegrees(double meters, double latitudeDegrees) {
+    double radians = Math.toRadians(latitudeDegrees);
+    double metersPerDegreeLon = METERS_PER_DEGREE_LAT * Math.cos(radians);
+    if (!Double.isFinite(metersPerDegreeLon) || Math.abs(metersPerDegreeLon) <= ABS_MIN_SPAN) {
+      return metersToLatitudeDegrees(meters);
+    }
+    return Math.max(meters / Math.abs(metersPerDegreeLon), ABS_MIN_SPAN);
   }
 }
