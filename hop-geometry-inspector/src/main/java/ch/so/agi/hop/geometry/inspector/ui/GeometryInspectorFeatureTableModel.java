@@ -29,11 +29,56 @@ final class GeometryInspectorFeatureTableModel {
   GeometryInspectorFeatureTableModel(
       SamplingResult samplingResult, GeometryBuildResult buildResult, String geometryField) {
     IRowMeta rowMeta = samplingResult == null ? null : samplingResult.rowMeta();
-    this.columns = List.copyOf(buildColumns(rowMeta));
-    this.entries = List.copyOf(buildEntries(samplingResult, buildResult, rowMeta, geometryField));
-    this.tableIndexByRowIndex = buildIndex(entries);
-    this.tableIndexByFeatureId = buildFeatureIdIndex(entries);
-    this.tableIndexByFeatureReference = buildFeatureReferenceIndex(entries);
+    List<Column> nextColumns = List.copyOf(buildColumns(rowMeta));
+    List<Entry> nextEntries = List.copyOf(buildEntries(samplingResult, buildResult, rowMeta, geometryField));
+    this.columns = nextColumns;
+    this.entries = nextEntries;
+    this.tableIndexByRowIndex = buildIndex(nextEntries);
+    this.tableIndexByFeatureId = buildFeatureIdIndex(nextEntries);
+    this.tableIndexByFeatureReference = buildFeatureReferenceIndex(nextEntries);
+  }
+
+  private GeometryInspectorFeatureTableModel(List<Column> columns, List<Entry> entries) {
+    List<Column> nextColumns = columns == null ? List.of() : List.copyOf(columns);
+    List<Entry> nextEntries = entries == null ? List.of() : List.copyOf(entries);
+    this.columns = nextColumns;
+    this.entries = nextEntries;
+    this.tableIndexByRowIndex = buildIndex(nextEntries);
+    this.tableIndexByFeatureId = buildFeatureIdIndex(nextEntries);
+    this.tableIndexByFeatureReference = buildFeatureReferenceIndex(nextEntries);
+  }
+
+  GeometryInspectorFeatureTableModel sortedByColumn(int columnIndex, boolean ascending) {
+    if (entries.isEmpty()) {
+      return new GeometryInspectorFeatureTableModel(columns, entries);
+    }
+    int normalizedColumnIndex = normalizeColumnIndex(columnIndex);
+    Comparator<Entry> comparator = comparatorForColumn(normalizedColumnIndex);
+    if (!ascending) {
+      comparator = comparator.reversed();
+    }
+    comparator = comparator.thenComparingInt(Entry::rowIndex);
+    List<Entry> sorted = new ArrayList<>(entries);
+    sorted.sort(comparator);
+    return new GeometryInspectorFeatureTableModel(columns, sorted);
+  }
+
+  int normalizeColumnIndex(int columnIndex) {
+    if (columns.isEmpty()) {
+      return -1;
+    }
+    if (columnIndex < 0 || columnIndex >= columns.size()) {
+      return 0;
+    }
+    return columnIndex;
+  }
+
+  private Comparator<Entry> comparatorForColumn(int columnIndex) {
+    if (columnIndex <= 0) {
+      return Comparator.comparingInt(Entry::rowIndex);
+    }
+    return Comparator.comparing(
+        entry -> entry.clipboardCellValueAt(columnIndex).toLowerCase(Locale.ROOT));
   }
 
   int size() {
@@ -171,7 +216,8 @@ final class GeometryInspectorFeatureTableModel {
 
   private List<String> buildCellValues(
       IRowMeta rowMeta, int rowIndex, Object[] row, boolean abbreviateValues) {
-    List<String> values = new ArrayList<>(columns.size());
+    int capacity = rowMeta == null ? 1 : rowMeta.size() + 1;
+    List<String> values = new ArrayList<>(capacity);
     values.add(String.valueOf(rowIndex));
     if (rowMeta == null) {
       return values;

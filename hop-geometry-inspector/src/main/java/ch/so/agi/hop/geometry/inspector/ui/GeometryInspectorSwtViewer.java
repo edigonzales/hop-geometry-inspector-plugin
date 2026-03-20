@@ -123,6 +123,8 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
   private String backgroundStatus = "off";
   private String backgroundErrorMessage = "";
   private List<String[]> attributeClipboardRows = List.of();
+  private Integer activeSortColumnIndex;
+  private int activeSortDirection = SWT.UP;
   private boolean updatingFeatureTableSelection;
   private boolean closed;
 
@@ -508,6 +510,7 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
   private void applyBuildResult(GeometryBuildResult buildResult, boolean resetView) {
     currentBuildResult = buildResult;
     featureTableModel = new GeometryInspectorFeatureTableModel(samplingResult, buildResult, fieldCombo.getText());
+    applyActiveFeatureTableSortToModel();
     selectedRowIndex = null;
     hoverPreviewRowIndex = null;
     requestCloseHitCandidateMenu();
@@ -1004,6 +1007,7 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
     updatingFeatureTableSelection = true;
     try {
       rebuildFeatureTableColumns();
+      updateFeatureTableSortIndicator();
       featureTable.deselectAll();
       featureTable.clearAll();
       featureTable.setItemCount(featureTableModel == null ? 0 : featureTableModel.size());
@@ -1019,11 +1023,103 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
     if (featureTableModel == null) {
       return;
     }
-    for (GeometryInspectorFeatureTableModel.Column column : featureTableModel.columns()) {
+    List<GeometryInspectorFeatureTableModel.Column> columns = featureTableModel.columns();
+    for (int columnIndex = 0; columnIndex < columns.size(); columnIndex++) {
+      GeometryInspectorFeatureTableModel.Column column = columns.get(columnIndex);
       TableColumn tableColumn = new TableColumn(featureTable, SWT.LEFT);
       tableColumn.setText(column.label());
       tableColumn.setWidth(preferredFeatureTableColumnWidth(column));
+      int selectedColumnIndex = columnIndex;
+      tableColumn.addListener(SWT.Selection, event -> onFeatureTableColumnSelected(selectedColumnIndex));
     }
+  }
+
+  private void onFeatureTableColumnSelected(int columnIndex) {
+    if (featureTableModel == null || featureTableModel.columnCount() <= 0) {
+      return;
+    }
+    int normalizedColumnIndex =
+        normalizeFeatureTableSortColumnIndex(columnIndex, featureTableModel.columnCount());
+    if (normalizedColumnIndex < 0) {
+      return;
+    }
+    int nextSortDirection =
+        resolveNextFeatureTableSortDirection(
+            activeSortColumnIndex, normalizedColumnIndex, activeSortDirection);
+    activeSortColumnIndex = normalizedColumnIndex;
+    activeSortDirection = nextSortDirection;
+    featureTableModel = featureTableModel.sortedByColumn(normalizedColumnIndex, nextSortDirection != SWT.DOWN);
+
+    Integer currentSelectedRowIndex = selectedRowIndex;
+    SimpleFeature selectedFeature =
+        currentSelectedRowIndex == null
+            ? null
+            : featureForRow(currentBuildResult, currentSelectedRowIndex);
+    refreshFeatureTable();
+    syncFeatureTableSelection(
+        currentSelectedRowIndex == null ? -1 : currentSelectedRowIndex, selectedFeature);
+  }
+
+  private void updateFeatureTableSortIndicator() {
+    if (featureTable == null || featureTable.isDisposed()) {
+      return;
+    }
+    if (featureTableModel == null || featureTableModel.columnCount() <= 0) {
+      featureTable.setSortColumn(null);
+      featureTable.setSortDirection(SWT.NONE);
+      return;
+    }
+    int normalizedColumnIndex =
+        normalizeFeatureTableSortColumnIndex(
+            activeSortColumnIndex == null ? 0 : activeSortColumnIndex, featureTableModel.columnCount());
+    int normalizedSortDirection = normalizeFeatureTableSortDirection(activeSortDirection);
+    TableColumn[] columns = featureTable.getColumns();
+    if (normalizedColumnIndex < 0 || normalizedColumnIndex >= columns.length) {
+      featureTable.setSortColumn(null);
+      featureTable.setSortDirection(SWT.NONE);
+      return;
+    }
+    featureTable.setSortColumn(columns[normalizedColumnIndex]);
+    featureTable.setSortDirection(normalizedSortDirection);
+  }
+
+  private void applyActiveFeatureTableSortToModel() {
+    if (featureTableModel == null || featureTableModel.columnCount() <= 0) {
+      activeSortColumnIndex = null;
+      activeSortDirection = SWT.UP;
+      return;
+    }
+    int normalizedColumnIndex =
+        normalizeFeatureTableSortColumnIndex(
+            activeSortColumnIndex == null ? 0 : activeSortColumnIndex, featureTableModel.columnCount());
+    int normalizedSortDirection = normalizeFeatureTableSortDirection(activeSortDirection);
+    featureTableModel =
+        featureTableModel.sortedByColumn(normalizedColumnIndex, normalizedSortDirection != SWT.DOWN);
+    activeSortColumnIndex = normalizedColumnIndex;
+    activeSortDirection = normalizedSortDirection;
+  }
+
+  static int normalizeFeatureTableSortColumnIndex(int columnIndex, int columnCount) {
+    if (columnCount <= 0) {
+      return -1;
+    }
+    if (columnIndex < 0 || columnIndex >= columnCount) {
+      return 0;
+    }
+    return columnIndex;
+  }
+
+  static int normalizeFeatureTableSortDirection(int sortDirection) {
+    return sortDirection == SWT.DOWN ? SWT.DOWN : SWT.UP;
+  }
+
+  static int resolveNextFeatureTableSortDirection(
+      Integer activeColumnIndex, int clickedColumnIndex, int currentSortDirection) {
+    int normalizedCurrentSortDirection = normalizeFeatureTableSortDirection(currentSortDirection);
+    if (activeColumnIndex != null && activeColumnIndex == clickedColumnIndex) {
+      return normalizedCurrentSortDirection == SWT.UP ? SWT.DOWN : SWT.UP;
+    }
+    return SWT.UP;
   }
 
   private int preferredFeatureTableColumnWidth(GeometryInspectorFeatureTableModel.Column column) {

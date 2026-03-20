@@ -107,6 +107,67 @@ class GeometryInspectorFeatureTableModelTest {
   }
 
   @Test
+  void sortsByRowColumnInAscendingAndDescendingOrder() {
+    RowMeta rowMeta = new RowMeta();
+    rowMeta.addValueMeta(new ValueMetaString("id"));
+    rowMeta.addValueMeta(new ValueMetaString("geom_wkt"));
+
+    List<Object[]> rows =
+        List.of(
+            new Object[] {"A-001", "POINT (1 2)"},
+            new Object[] {"broken", "invalid"},
+            new Object[] {"C-003", "POINT (3 4)"});
+
+    GeometryBuildResult buildResult = featureBuilder.build(rowMeta, rows, "geom_wkt");
+    GeometryInspectorFeatureTableModel model =
+        new GeometryInspectorFeatureTableModel(
+            samplingResult(rows, rowMeta), buildResult, "geom_wkt");
+
+    GeometryInspectorFeatureTableModel sortedDescending = model.sortedByColumn(0, false);
+    GeometryInspectorFeatureTableModel sortedAscending = sortedDescending.sortedByColumn(0, true);
+
+    assertThat(sortedDescending.entryAt(0).rowIndex()).isEqualTo(2);
+    assertThat(sortedDescending.entryAt(1).rowIndex()).isEqualTo(0);
+    assertThat(sortedDescending.indexOfRow(2)).isEqualTo(0);
+    assertThat(sortedDescending.indexOfRow(0)).isEqualTo(1);
+    assertThat(sortedAscending.entryAt(0).rowIndex()).isEqualTo(0);
+    assertThat(sortedAscending.entryAt(1).rowIndex()).isEqualTo(2);
+  }
+
+  @Test
+  void sortsAttributeColumnsUsingFullCellValuesAndKeepsFeatureIndexesStable() {
+    RowMeta rowMeta = new RowMeta();
+    rowMeta.addValueMeta(new ValueMetaString("label"));
+    rowMeta.addValueMeta(new ValueMetaString("geom_wkt"));
+
+    String prefix = "p".repeat(GeometryInspectorFeatureTableModel.MAX_CELL_VALUE_LENGTH);
+    String longZ = prefix + "Z";
+    String longA = prefix + "A";
+    List<Object[]> rows =
+        List.of(
+            new Object[] {longZ, "POINT (0 0)"},
+            new Object[] {longA, "POINT (1 1)"});
+
+    GeometryBuildResult buildResult = featureBuilder.build(rowMeta, rows, "geom_wkt");
+    GeometryInspectorFeatureTableModel model =
+        new GeometryInspectorFeatureTableModel(
+            samplingResult(rows, rowMeta), buildResult, "geom_wkt");
+
+    SimpleFeature firstFeature = model.entryAt(0).feature();
+    SimpleFeature secondFeature = model.entryAt(1).feature();
+
+    GeometryInspectorFeatureTableModel sortedAscending = model.sortedByColumn(1, true);
+    GeometryInspectorFeatureTableModel sortedDescending = model.sortedByColumn(1, false);
+
+    assertThat(sortedAscending.entryAt(0).rowIndex()).isEqualTo(1);
+    assertThat(sortedAscending.entryAt(1).rowIndex()).isEqualTo(0);
+    assertThat(sortedAscending.indexOfFeature(firstFeature)).isEqualTo(1);
+    assertThat(sortedAscending.indexOfFeature(secondFeature)).isEqualTo(0);
+    assertThat(sortedDescending.entryAt(0).rowIndex()).isEqualTo(0);
+    assertThat(sortedDescending.entryAt(1).rowIndex()).isEqualTo(1);
+  }
+
+  @Test
   void resolvesEntryByFeatureIdWhenRowIndexIsMissing() {
     RowMeta rowMeta = new RowMeta();
     rowMeta.addValueMeta(new ValueMetaString("name"));

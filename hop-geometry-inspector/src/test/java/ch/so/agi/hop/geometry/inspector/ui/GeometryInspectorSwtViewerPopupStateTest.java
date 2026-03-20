@@ -9,6 +9,7 @@ import ch.so.agi.hop.geometry.inspector.model.SamplingResult;
 import java.util.List;
 import org.apache.hop.core.row.RowMeta;
 import org.apache.hop.core.row.value.ValueMetaString;
+import org.eclipse.swt.SWT;
 import org.geotools.api.feature.simple.SimpleFeature;
 import org.geotools.feature.simple.SimpleFeatureBuilder;
 import org.junit.jupiter.api.Test;
@@ -36,6 +37,27 @@ class GeometryInspectorSwtViewerPopupStateTest {
   void shouldRequestPopupMenuVisibilityCloseOnlyForVisibleMenus() {
     assertThat(GeometryInspectorSwtViewer.shouldRequestPopupMenuVisibilityClose(true)).isTrue();
     assertThat(GeometryInspectorSwtViewer.shouldRequestPopupMenuVisibilityClose(false)).isFalse();
+  }
+
+  @Test
+  void resolveNextFeatureTableSortDirectionTogglesForSameColumn() {
+    assertThat(GeometryInspectorSwtViewer.resolveNextFeatureTableSortDirection(2, 2, SWT.UP))
+        .isEqualTo(SWT.DOWN);
+    assertThat(GeometryInspectorSwtViewer.resolveNextFeatureTableSortDirection(2, 2, SWT.DOWN))
+        .isEqualTo(SWT.UP);
+  }
+
+  @Test
+  void resolveNextFeatureTableSortDirectionResetsToAscendingOnColumnChange() {
+    assertThat(GeometryInspectorSwtViewer.resolveNextFeatureTableSortDirection(1, 3, SWT.DOWN))
+        .isEqualTo(SWT.UP);
+  }
+
+  @Test
+  void normalizeFeatureTableSortColumnIndexFallsBackToFirstColumn() {
+    assertThat(GeometryInspectorSwtViewer.normalizeFeatureTableSortColumnIndex(-1, 4)).isEqualTo(0);
+    assertThat(GeometryInspectorSwtViewer.normalizeFeatureTableSortColumnIndex(9, 4)).isEqualTo(0);
+    assertThat(GeometryInspectorSwtViewer.normalizeFeatureTableSortColumnIndex(2, 4)).isEqualTo(2);
   }
 
   @Test
