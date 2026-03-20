@@ -20,6 +20,8 @@ import org.eclipse.swt.widgets.Shell;
 
 public class GeometryInspectorOptionsDialog {
 
+  static final String SAMPLE_SIZE_ALL_LABEL = "ALL";
+
   private final Shell parent;
   private final List<GeometryFieldCandidate> outputCandidates;
   private final List<GeometryFieldCandidate> inputCandidates;
@@ -66,7 +68,7 @@ public class GeometryInspectorOptionsDialog {
 
     Combo sampleSizeCombo = new Combo(shell, SWT.DROP_DOWN);
     sampleSizeCombo.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-    sampleSizeCombo.setItems(new String[] {"50", "200", "1000"});
+    sampleSizeCombo.setItems(new String[] {"50", "200", "1000", SAMPLE_SIZE_ALL_LABEL});
     sampleSizeCombo.setText("200");
 
     Label samplingModeLabel = new Label(shell, SWT.NONE);
@@ -132,7 +134,7 @@ public class GeometryInspectorOptionsDialog {
         SWT.Selection,
         event -> {
           try {
-            int sampleSize = Integer.parseInt(sampleSizeCombo.getText().trim());
+            int sampleSize = parseSampleSize(sampleSizeCombo.getText());
             int timeoutSeconds = Integer.parseInt(timeoutCombo.getText().trim());
             SamplingMode mode = SamplingMode.fromLabel(samplingModeCombo.getText());
             GeometryInspectionSide inspectionSide =
@@ -155,7 +157,7 @@ public class GeometryInspectorOptionsDialog {
             MessageBox messageBox = new MessageBox(shell, SWT.ICON_WARNING | SWT.OK);
             messageBox.setText("Invalid options");
             messageBox.setMessage(
-                "Please provide valid numeric values and select a geometry field.");
+                "Please provide a valid sample size (number or ALL), timeout, and geometry field.");
             messageBox.open();
           }
         });
@@ -225,5 +227,23 @@ public class GeometryInspectorOptionsDialog {
       }
     }
     return candidates.get(0).fieldName();
+  }
+
+  static int parseSampleSize(String value) {
+    if (value == null) {
+      throw new IllegalArgumentException("sample size must not be null");
+    }
+    String trimmed = value.trim();
+    if (trimmed.isEmpty()) {
+      throw new IllegalArgumentException("sample size must not be blank");
+    }
+    if (SAMPLE_SIZE_ALL_LABEL.equalsIgnoreCase(trimmed)) {
+      return Integer.MAX_VALUE;
+    }
+    int sampleSize = Integer.parseInt(trimmed);
+    if (sampleSize <= 0) {
+      throw new IllegalArgumentException("sample size must be > 0");
+    }
+    return sampleSize;
   }
 }

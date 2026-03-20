@@ -194,6 +194,10 @@ Notes:
 | `LAST` | When the preview finishes naturally or when the timeout is reached. | The last `N` rows seen on the effective side. | Timeout can cut the sample short and mark it partial. |
 | `RANDOM` | When the preview finishes naturally or when the timeout is reached. | A reservoir sample of up to `N` rows from the effective side. | Timeout can cut the sample short and mark it partial. |
 
+`Sample size` accepts numeric values and `ALL`. With `ALL`, the inspector keeps every sampled row on
+the effective side (no size cap). For `FIRST + ALL`, sampling runs until the preview finishes
+naturally.
+
 Completion and fallback behavior:
 
 - The viewer status line and the SWT fallback summary report the sample as `full` or `partial`.
@@ -234,7 +238,7 @@ This message can appear in test runs and is expected in a plain Maven test envir
    - Open transform popup, confirm `Inspect geometries...` is visible.
 2. Inspector options:
    - Select geometry field and sampling mode (`FIRST`, `LAST`, `RANDOM`).
-   - Start with sample sizes like `50`, `200`, `1000`.
+   - Start with sample sizes like `50`, `200`, `1000`, or `ALL`.
 3. Viewer behavior:
    - Verify zoom/pan/reset extent.
    - Verify status metrics (rows/features/errors, partial/full).
