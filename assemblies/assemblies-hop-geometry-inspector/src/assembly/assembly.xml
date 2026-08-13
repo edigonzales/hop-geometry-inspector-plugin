@@ -33,12 +33,4 @@
       </excludes>
     </dependencySet>
   </dependencySets>
-
-  <files>
-    <file>
-      <source>src/assembly/dependencies.xml</source>
-      <outputDirectory>plugins/misc/hop-geometry-inspector</outputDirectory>
-      <destName>dependencies.xml</destName>
-    </file>
-  </files>
 </assembly>
