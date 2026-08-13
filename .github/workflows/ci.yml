@@ -25,5 +25,18 @@ jobs:
           java-version: "17"
           cache: maven
 
-      - name: Run tests
-        run: mvn -U -B -ntp test
+      - name: Build and test
+        run: mvn -U -B -ntp verify
+
+      - name: Verify shared geometry runtime packaging
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="assemblies/assemblies-hop-geometry-inspector/target/hop-geometry-inspector-plugin-0.1.0-SNAPSHOT.zip"
+          test -f "$ZIP"
+          unzip -l "$ZIP" > /tmp/inspector-zip.txt
+
+          if grep -E '(^|/)(hop-geometry-type[^/]*\.jar|jts-core[^/]*\.jar|dependencies\.xml)$' /tmp/inspector-zip.txt; then
+            echo "Inspector ZIP must not package the shared geometry runtime or dependencies.xml" >&2
+            exit 1
+          fi
