@@ -1,8 +1,7 @@
 package ch.so.agi.hop.geometry.inspector.parsing;
 
+import com.atolcd.hop.core.row.value.GeometryInterface;
 import com.atolcd.hop.gis.geometry.curve.CurveGeometrySupport;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Method;
 import java.util.Locale;
 import org.apache.hop.core.row.IValueMeta;
 import org.locationtech.jts.geom.Geometry;
@@ -11,11 +10,6 @@ import org.locationtech.jts.io.WKTReader;
 
 public class GeometryParser {
 
-  private static final String JTS_GEOMETRY_CLASS_NAME = "org.locationtech.jts.geom.Geometry";
-  private static final String JTS_WKB_WRITER_CLASS_NAME = "org.locationtech.jts.io.WKBWriter";
-  private static final String CURVE_GEOMETRY_SUPPORT_CLASS_NAME =
-      "com.atolcd.hop.gis.geometry.curve.CurveGeometrySupport";
-
   private final WKTReader wktReader = new WKTReader();
 
   public Geometry parseGeometry(IValueMeta valueMeta, Object value) throws Exception {
@@ -23,6 +17,8 @@ public class GeometryParser {
       return null;
     }
 
+    // Geometry values produced by geometry-aware Hop plugins share the sogeo-geometry classloader
+    // with the Inspector. No classloader bridge or WKB roundtrip is needed for live row values.
     if (value instanceof Geometry geometry) {
       return normalizeGeometry(geometry);
     }
@@ -44,49 +40,19 @@ public class GeometryParser {
       return normalizeGeometry(parseString(chars.toString()));
     }
 
-    Exception deferredFailure = null;
-
-    // Prefer a binary bridge for foreign JTS objects. Curve subclasses inherit a linearized JTS
-    // representation, so a WKT/toText bridge would silently discard their exact curve definition.
-    try {
-      Geometry foreignGeometry = parseForeignGeometryObject(value);
-      if (foreignGeometry != null) {
-        return normalizeGeometry(foreignGeometry);
-      }
-    } catch (Exception e) {
-      deferredFailure = e;
-    }
-
-    try {
-      Geometry geometryFromStringBridge = parseViaValueMetaString(valueMeta, value);
-      if (geometryFromStringBridge != null) {
-        return normalizeGeometry(geometryFromStringBridge);
-      }
-    } catch (Exception e) {
-      if (deferredFailure == null) {
-        deferredFailure = e;
-      }
-    }
-
-    if (deferredFailure != null) {
-      throw deferredFailure;
+    Geometry geometryFromStringBridge = parseViaValueMetaString(valueMeta, value);
+    if (geometryFromStringBridge != null) {
+      return normalizeGeometry(geometryFromStringBridge);
     }
 
     throw new ParseException("Unsupported geometry value type: " + value.getClass().getName());
   }
 
   private Geometry parseViaGeometryInterface(IValueMeta valueMeta, Object value) throws Exception {
-    if (valueMeta == null) {
+    if (!(valueMeta instanceof GeometryInterface geometryMeta)) {
       return null;
     }
-    try {
-      Method method = valueMeta.getClass().getMethod("getGeometry", Object.class);
-      method.setAccessible(true);
-      Object geometry = method.invoke(valueMeta, value);
-      return parseGeometryObject(geometry);
-    } catch (NoSuchMethodException ignored) {
-      return null;
-    }
+    return geometryMeta.getGeometry(value);
   }
 
   private Geometry parseViaValueMetaString(IValueMeta valueMeta, Object value) throws Exception {
@@ -100,81 +66,6 @@ public class GeometryParser {
     }
 
     return parseString(text);
-  }
-
-  private Geometry parseGeometryObject(Object value) throws Exception {
-    if (value == null) {
-      return null;
-    }
-
-    if (value instanceof Geometry geometry) {
-      return geometry;
-    }
-
-    if (value instanceof byte[] bytes) {
-      return parseWkb(bytes);
-    }
-
-    if (value instanceof String text) {
-      return parseString(text);
-    }
-
-    if (value instanceof CharSequence chars) {
-      return parseString(chars.toString());
-    }
-
-    return parseForeignGeometryObject(value);
-  }
-
-  private Geometry parseForeignGeometryObject(Object value) throws Exception {
-    if (value == null) {
-      return null;
-    }
-
-    Class<?> geometryClass = findForeignJtsGeometryClass(value.getClass());
-    if (geometryClass == null) {
-      return null;
-    }
-
-    ClassLoader foreignClassLoader = value.getClass().getClassLoader();
-    byte[] wkb = writeForeignGeometry(value, geometryClass, foreignClassLoader);
-    Geometry geometry = parseWkb(wkb);
-
-    Integer srid = invokeIntegerMethod(value, "getSRID");
-    if (srid != null && srid > 0 && geometry.getSRID() != srid) {
-      geometry.setSRID(srid);
-    }
-
-    return geometry;
-  }
-
-  private byte[] writeForeignGeometry(
-      Object geometryValue, Class<?> geometryClass, ClassLoader foreignClassLoader)
-      throws ReflectiveOperationException {
-    try {
-      Class<?> curveSupportClass =
-          Class.forName(CURVE_GEOMETRY_SUPPORT_CLASS_NAME, true, foreignClassLoader);
-      Method writeMethod = curveSupportClass.getMethod("writeWkb", geometryClass);
-      return (byte[]) writeMethod.invoke(null, geometryValue);
-    } catch (ClassNotFoundException | NoSuchMethodException e) {
-      Class<?> foreignWkbWriterClass =
-          Class.forName(JTS_WKB_WRITER_CLASS_NAME, true, foreignClassLoader);
-      Constructor<?> constructor = foreignWkbWriterClass.getConstructor();
-      Object foreignWkbWriter = constructor.newInstance();
-      Method writeMethod = foreignWkbWriterClass.getMethod("write", geometryClass);
-      return (byte[]) writeMethod.invoke(foreignWkbWriter, geometryValue);
-    }
-  }
-
-  private Class<?> findForeignJtsGeometryClass(Class<?> valueClass) {
-    Class<?> current = valueClass;
-    while (current != null) {
-      if (JTS_GEOMETRY_CLASS_NAME.equals(current.getName())) {
-        return current;
-      }
-      current = current.getSuperclass();
-    }
-    return null;
   }
 
   private Geometry parseString(String text) throws Exception {
@@ -242,19 +133,6 @@ public class GeometryParser {
       data[i / 2] = (byte) ((high << 4) + low);
     }
     return data;
-  }
-
-  private Integer invokeIntegerMethod(Object target, String methodName) throws Exception {
-    Method method = target.getClass().getMethod(methodName);
-    method.setAccessible(true);
-    Object value = method.invoke(target);
-    if (value == null) {
-      return null;
-    }
-    if (value instanceof Number number) {
-      return number.intValue();
-    }
-    return Integer.valueOf(value.toString());
   }
 
   private Geometry normalizeGeometry(Geometry geometry) {
