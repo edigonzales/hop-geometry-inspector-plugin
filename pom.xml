@@ -20,6 +20,7 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <maven.compiler.release>17</maven.compiler.release>
     <hop.version>2.17.0</hop.version>
+    <hop.geometry.type.version>0.1.0-SNAPSHOT</hop.geometry.type.version>
     <jts.version>1.20.0</jts.version>
     <geotools.version>31.3</geotools.version>
     <junit.version>5.12.0</junit.version>
@@ -64,6 +65,14 @@
     <repository>
       <id>osgeo</id>
       <url>https://repo.osgeo.org/repository/release/</url>
+    </repository>
+    <repository>
+      <id>sogeo-releases</id>
+      <url>https://jars.sogeo.services/releases/</url>
+    </repository>
+    <repository>
+      <id>sogeo-snapshots</id>
+      <url>https://jars.sogeo.services/snapshots/</url>
     </repository>
   </repositories>
 
