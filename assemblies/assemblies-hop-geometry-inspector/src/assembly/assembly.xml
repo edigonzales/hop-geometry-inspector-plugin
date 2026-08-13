@@ -28,7 +28,17 @@
       <unpack>false</unpack>
       <excludes>
         <exclude>ch.so.agi:hop-geometry-inspector</exclude>
+        <exclude>ch.so.agi:hop-geometry-type</exclude>
+        <exclude>org.locationtech.jts:jts-core</exclude>
       </excludes>
     </dependencySet>
   </dependencySets>
+
+  <files>
+    <file>
+      <source>src/assembly/dependencies.xml</source>
+      <outputDirectory>plugins/misc/hop-geometry-inspector</outputDirectory>
+      <destName>dependencies.xml</destName>
+    </file>
+  </files>
 </assembly>
