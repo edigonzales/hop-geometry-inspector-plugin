@@ -3,16 +3,20 @@ package ch.so.agi.hop.geometry.inspector;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.so.agi.hop.geometry.inspector.parsing.GeometryParser;
+import com.atolcd.hop.core.row.value.GeometryInterface;
 import com.atolcd.hop.gis.geometry.curve.CircularString;
 import com.atolcd.hop.gis.geometry.curve.CompoundCurve;
 import com.atolcd.hop.gis.geometry.curve.CurveGeometrySupport;
 import com.atolcd.hop.gis.geometry.curve.CurvePolygon;
 import com.atolcd.hop.gis.geometry.curve.MultiCurve;
 import com.atolcd.hop.gis.geometry.curve.MultiSurface;
-import java.net.URL;
-import java.net.URLClassLoader;
+import java.sql.ResultSetMetaData;
 import java.util.List;
+import org.apache.hop.core.database.DatabaseMeta;
+import org.apache.hop.core.exception.HopDatabaseException;
+import org.apache.hop.core.row.IValueMeta;
 import org.apache.hop.core.row.value.ValueMetaString;
+import org.apache.hop.core.variables.IVariables;
 import org.junit.jupiter.api.Test;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Geometry;
@@ -68,7 +72,8 @@ class GeometryParserTest {
     MultiSurface multiSurface =
         new MultiSurface(List.of(square(factory, -3, -3, -2, -2), curvePolygon(factory)), factory);
 
-    for (Geometry source : List.of(circularString, compoundCurve, curvePolygon, multiCurve, multiSurface)) {
+    for (Geometry source :
+        List.of(circularString, compoundCurve, curvePolygon, multiCurve, multiSurface)) {
       source.setSRID(2056);
       Geometry parsed = parser.parseGeometry(valueMeta, CurveGeometrySupport.writeWkb(source));
 
@@ -79,73 +84,50 @@ class GeometryParserTest {
     Geometry fromHex =
         parser.parseGeometry(valueMeta, toHex(CurveGeometrySupport.writeWkb(curvePolygon)));
     assertThat(fromHex).isInstanceOf(CurvePolygon.class);
-    CircularString ring =
-        (CircularString) ((CurvePolygon) fromHex).getCurveRings().get(0);
+    CircularString ring = (CircularString) ((CurvePolygon) fromHex).getCurveRings().get(0);
     assertThat(ring.getControlPoints()).hasSize(5);
   }
 
   @Test
-  void parsesForeignCurveWithoutStrokingIt() throws Exception {
+  void keepsSharedGeometryObjectWithoutRoundTrip() throws Exception {
+    Geometry source = new GeometryFactory().createPoint(new Coordinate(3, 4));
+    source.setSRID(2056);
+
+    Geometry parsed = parser.parseGeometry(null, source);
+
+    assertThat(parsed).isSameAs(source);
+    assertThat(parsed.getSRID()).isEqualTo(2056);
+  }
+
+  @Test
+  void keepsSharedTrueCurveObjectWithoutRoundTrip() throws Exception {
     CurvePolygon source = curvePolygon(new GeometryFactory());
     source.setSRID(2056);
-    byte[] wkb = CurveGeometrySupport.writeWkb(source);
 
-    try (ForeignCurveGeometryHandle foreignGeometry = ForeignCurveGeometryHandle.create(wkb, 2056)) {
-      Geometry parsed = parser.parseGeometry(null, foreignGeometry.geometry());
+    Geometry parsed = parser.parseGeometry(null, source);
 
-      assertThat(parsed).isInstanceOf(CurvePolygon.class);
-      assertThat(parsed.getSRID()).isEqualTo(2056);
-      CurvePolygon parsedPolygon = (CurvePolygon) parsed;
-      assertThat(parsedPolygon.getCurveRings()).hasSize(1);
-      assertThat(parsedPolygon.getCurveRings().get(0)).isInstanceOf(CircularString.class);
-      CircularString ring = (CircularString) parsedPolygon.getCurveRings().get(0);
-      assertThat(ring.getControlPoints()).hasSize(5);
-      assertThat(ring.getControlPoints()[1].getX()).isEqualTo(4.0);
-    }
+    assertThat(parsed).isSameAs(source);
+    assertThat(parsed).isInstanceOf(CurvePolygon.class);
+    CircularString ring = (CircularString) ((CurvePolygon) parsed).getCurveRings().get(0);
+    assertThat(ring.getControlPoints()).hasSize(5);
+    assertThat(ring.getControlPoints()[1].getX()).isEqualTo(4.0);
   }
 
   @Test
-  void parsesForeignGeometryViaReflectiveGeometryMethod() throws Exception {
-    try (ForeignGeometryHandle foreignGeometry = ForeignGeometryHandle.create("POINT (3 4)", 2056)) {
-      Geometry parsed =
-          parser.parseGeometry(new ForeignGeometryReflectiveMeta(), foreignGeometry.geometry());
+  void parsesViaSharedGeometryInterfaceWithoutReflection() throws Exception {
+    Geometry source = new GeometryFactory().createPoint(new Coordinate(9, 10));
+    source.setSRID(21781);
+    GeometryInterfaceMeta valueMeta = new GeometryInterfaceMeta(source);
 
-      assertThat(parsed).isNotNull();
-      assertThat(parsed.getGeometryType()).isEqualTo("Point");
-      assertThat(parsed.getSRID()).isEqualTo(2056);
-      assertThat(parsed.getCoordinate().getX()).isEqualTo(3.0);
-    }
-  }
+    Geometry parsed = parser.parseGeometry(valueMeta, new Object());
 
-  @Test
-  void prefersForeignGeometryBinaryBridgeOverValueMetaStringBridge() throws Exception {
-    try (ForeignGeometryHandle foreignGeometry = ForeignGeometryHandle.create("POINT (9 10)", 21781)) {
-      Geometry parsed =
-          parser.parseGeometry(new BrokenForeignGeometryStringBridgeMeta(), foreignGeometry.geometry());
-
-      assertThat(parsed).isNotNull();
-      assertThat(parsed.getGeometryType()).isEqualTo("Point");
-      assertThat(parsed.getSRID()).isEqualTo(21781);
-      assertThat(parsed.getCoordinate().getY()).isEqualTo(10.0);
-    }
-  }
-
-  @Test
-  void parsesForeignGeometryWithoutValueMetaBridge() throws Exception {
-    try (ForeignGeometryHandle foreignGeometry = ForeignGeometryHandle.create("POINT (11 12)", 0)) {
-      Geometry parsed = parser.parseGeometry(null, foreignGeometry.geometry());
-
-      assertThat(parsed).isNotNull();
-      assertThat(parsed.getGeometryType()).isEqualTo("Point");
-      assertThat(parsed.getCoordinate().getX()).isEqualTo(11.0);
-    }
+    assertThat(parsed).isSameAs(source);
+    assertThat(parsed.getSRID()).isEqualTo(21781);
   }
 
   private static CircularString openCircularString(GeometryFactory factory) {
     return new CircularString(
-        new Coordinate[] {
-          new Coordinate(0, 0), new Coordinate(1, 1), new Coordinate(2, 0)
-        },
+        new Coordinate[] {new Coordinate(0, 0), new Coordinate(1, 1), new Coordinate(2, 0)},
         factory);
   }
 
@@ -189,64 +171,31 @@ class GeometryParserTest {
     return builder.toString();
   }
 
-  private static final class ForeignGeometryReflectiveMeta extends ValueMetaString {
-    private ForeignGeometryReflectiveMeta() {
+  private static final class GeometryInterfaceMeta extends ValueMetaString
+      implements GeometryInterface {
+    private final Geometry geometry;
+
+    private GeometryInterfaceMeta(Geometry geometry) {
       super("geom");
-    }
-
-    public Object getGeometry(Object object) {
-      return object;
-    }
-  }
-
-  private static final class BrokenForeignGeometryStringBridgeMeta extends ValueMetaString {
-    private BrokenForeignGeometryStringBridgeMeta() {
-      super("geom");
+      this.geometry = geometry;
     }
 
     @Override
-    public String getString(Object object) {
-      throw new IllegalStateException("String bridge must not be used for a foreign geometry object");
-    }
-  }
-
-  private record ForeignGeometryHandle(URLClassLoader classLoader, Object geometry)
-      implements AutoCloseable {
-    private static ForeignGeometryHandle create(String wkt, int srid) throws Exception {
-      URL jtsJar = Geometry.class.getProtectionDomain().getCodeSource().getLocation();
-      URLClassLoader classLoader = new URLClassLoader(new URL[] {jtsJar}, null);
-      Class<?> readerClass = Class.forName("org.locationtech.jts.io.WKTReader", true, classLoader);
-      Object reader = readerClass.getConstructor().newInstance();
-      Object geometry = readerClass.getMethod("read", String.class).invoke(reader, wkt);
-      geometry.getClass().getMethod("setSRID", int.class).invoke(geometry, srid);
-      return new ForeignGeometryHandle(classLoader, geometry);
+    public Geometry getGeometry(Object object) {
+      return geometry;
     }
 
     @Override
-    public void close() throws Exception {
-      classLoader.close();
-    }
-  }
-
-  private record ForeignCurveGeometryHandle(URLClassLoader classLoader, Object geometry)
-      implements AutoCloseable {
-    private static ForeignCurveGeometryHandle create(byte[] wkb, int srid) throws Exception {
-      URL geometryTypeLocation =
-          CurveGeometrySupport.class.getProtectionDomain().getCodeSource().getLocation();
-      URL jtsLocation = Geometry.class.getProtectionDomain().getCodeSource().getLocation();
-      URLClassLoader classLoader =
-          new URLClassLoader(new URL[] {geometryTypeLocation, jtsLocation}, null);
-      Class<?> supportClass =
-          Class.forName(
-              "com.atolcd.hop.gis.geometry.curve.CurveGeometrySupport", true, classLoader);
-      Object geometry = supportClass.getMethod("readWkb", byte[].class).invoke(null, (Object) wkb);
-      geometry.getClass().getMethod("setSRID", int.class).invoke(geometry, srid);
-      return new ForeignCurveGeometryHandle(classLoader, geometry);
-    }
-
-    @Override
-    public void close() throws Exception {
-      classLoader.close();
+    public IValueMeta getValueFromSqlType(
+        IVariables variables,
+        DatabaseMeta databaseMeta,
+        String name,
+        ResultSetMetaData resultSetMetaData,
+        int index,
+        boolean ignoreLength,
+        boolean lazyConversion)
+        throws HopDatabaseException {
+      return null;
     }
   }
 }
