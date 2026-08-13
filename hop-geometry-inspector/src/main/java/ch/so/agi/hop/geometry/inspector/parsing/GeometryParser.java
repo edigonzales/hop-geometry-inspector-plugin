@@ -1,16 +1,21 @@
 package ch.so.agi.hop.geometry.inspector.parsing;
 
+import com.atolcd.hop.gis.geometry.curve.CurveGeometrySupport;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.util.Locale;
 import org.apache.hop.core.row.IValueMeta;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.io.ParseException;
-import org.locationtech.jts.io.WKBReader;
 import org.locationtech.jts.io.WKTReader;
 
 public class GeometryParser {
 
-  private final WKBReader wkbReader = new WKBReader();
+  private static final String JTS_GEOMETRY_CLASS_NAME = "org.locationtech.jts.geom.Geometry";
+  private static final String JTS_WKB_WRITER_CLASS_NAME = "org.locationtech.jts.io.WKBWriter";
+  private static final String CURVE_GEOMETRY_SUPPORT_CLASS_NAME =
+      "com.atolcd.hop.gis.geometry.curve.CurveGeometrySupport";
+
   private final WKTReader wktReader = new WKTReader();
 
   public Geometry parseGeometry(IValueMeta valueMeta, Object value) throws Exception {
@@ -41,19 +46,21 @@ public class GeometryParser {
 
     Exception deferredFailure = null;
 
+    // Prefer a binary bridge for foreign JTS objects. Curve subclasses inherit a linearized JTS
+    // representation, so a WKT/toText bridge would silently discard their exact curve definition.
     try {
-      Geometry geometryFromStringBridge = parseViaValueMetaString(valueMeta, value);
-      if (geometryFromStringBridge != null) {
-        return normalizeGeometry(geometryFromStringBridge);
+      Geometry foreignGeometry = parseForeignGeometryObject(value);
+      if (foreignGeometry != null) {
+        return normalizeGeometry(foreignGeometry);
       }
     } catch (Exception e) {
       deferredFailure = e;
     }
 
     try {
-      Geometry foreignGeometry = parseForeignGeometryObject(value);
-      if (foreignGeometry != null) {
-        return normalizeGeometry(foreignGeometry);
+      Geometry geometryFromStringBridge = parseViaValueMetaString(valueMeta, value);
+      if (geometryFromStringBridge != null) {
+        return normalizeGeometry(geometryFromStringBridge);
       }
     } catch (Exception e) {
       if (deferredFailure == null) {
@@ -120,21 +127,54 @@ public class GeometryParser {
   }
 
   private Geometry parseForeignGeometryObject(Object value) throws Exception {
-    if (value == null || !isLikelyForeignJtsGeometry(value)) {
+    if (value == null) {
       return null;
     }
 
-    String wkt = invokeStringMethod(value, "toText");
-    if (wkt == null || wkt.isBlank()) {
+    Class<?> geometryClass = findForeignJtsGeometryClass(value.getClass());
+    if (geometryClass == null) {
       return null;
     }
+
+    ClassLoader foreignClassLoader = value.getClass().getClassLoader();
+    byte[] wkb = writeForeignGeometry(value, geometryClass, foreignClassLoader);
+    Geometry geometry = parseWkb(wkb);
 
     Integer srid = invokeIntegerMethod(value, "getSRID");
-    if (srid != null && srid > 0) {
-      return parseWktOrEwkt("SRID=" + srid + ";" + wkt);
+    if (srid != null && srid > 0 && geometry.getSRID() != srid) {
+      geometry.setSRID(srid);
     }
 
-    return parseWktOrEwkt(wkt);
+    return geometry;
+  }
+
+  private byte[] writeForeignGeometry(
+      Object geometryValue, Class<?> geometryClass, ClassLoader foreignClassLoader)
+      throws ReflectiveOperationException {
+    try {
+      Class<?> curveSupportClass =
+          Class.forName(CURVE_GEOMETRY_SUPPORT_CLASS_NAME, true, foreignClassLoader);
+      Method writeMethod = curveSupportClass.getMethod("writeWkb", geometryClass);
+      return (byte[]) writeMethod.invoke(null, geometryValue);
+    } catch (ClassNotFoundException | NoSuchMethodException e) {
+      Class<?> foreignWkbWriterClass =
+          Class.forName(JTS_WKB_WRITER_CLASS_NAME, true, foreignClassLoader);
+      Constructor<?> constructor = foreignWkbWriterClass.getConstructor();
+      Object foreignWkbWriter = constructor.newInstance();
+      Method writeMethod = foreignWkbWriterClass.getMethod("write", geometryClass);
+      return (byte[]) writeMethod.invoke(foreignWkbWriter, geometryValue);
+    }
+  }
+
+  private Class<?> findForeignJtsGeometryClass(Class<?> valueClass) {
+    Class<?> current = valueClass;
+    while (current != null) {
+      if (JTS_GEOMETRY_CLASS_NAME.equals(current.getName())) {
+        return current;
+      }
+      current = current.getSuperclass();
+    }
+    return null;
   }
 
   private Geometry parseString(String text) throws Exception {
@@ -170,11 +210,7 @@ public class GeometryParser {
   }
 
   private Geometry parseWkb(byte[] wkb) throws Exception {
-    return wkbReader.read(wkb);
-  }
-
-  private boolean isLikelyForeignJtsGeometry(Object value) {
-    return value.getClass().getName().startsWith("org.locationtech.jts.geom.");
+    return CurveGeometrySupport.readWkb(wkb);
   }
 
   private boolean isLikelyHex(String value) {
@@ -183,9 +219,10 @@ public class GeometryParser {
     }
     for (int i = 0; i < value.length(); i++) {
       char c = value.charAt(i);
-      boolean hex = (c >= '0' && c <= '9')
-          || (c >= 'a' && c <= 'f')
-          || (c >= 'A' && c <= 'F');
+      boolean hex =
+          (c >= '0' && c <= '9')
+              || (c >= 'a' && c <= 'f')
+              || (c >= 'A' && c <= 'F');
       if (!hex) {
         return false;
       }
@@ -205,13 +242,6 @@ public class GeometryParser {
       data[i / 2] = (byte) ((high << 4) + low);
     }
     return data;
-  }
-
-  private String invokeStringMethod(Object target, String methodName) throws Exception {
-    Method method = target.getClass().getMethod(methodName);
-    method.setAccessible(true);
-    Object value = method.invoke(target);
-    return value == null ? null : value.toString();
   }
 
   private Integer invokeIntegerMethod(Object target, String methodName) throws Exception {
