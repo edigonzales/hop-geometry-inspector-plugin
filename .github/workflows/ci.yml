@@ -40,3 +40,37 @@ jobs:
             echo "Inspector ZIP must not package the shared geometry runtime or dependencies.xml" >&2
             exit 1
           fi
+
+      - name: Checkout geometry type plugin
+        uses: actions/checkout@v4
+        with:
+          repository: edigonzales/hop-geometry-type-plugin
+          ref: main
+          path: geometry-type-source
+
+      - name: Build geometry type install ZIP
+        run: mvn -U -B -ntp -f geometry-type-source/pom.xml -DskipTests package
+
+      - name: Verify installed Hop plugin classloader identity
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          INSTALL_ROOT="$RUNNER_TEMP/hop-installed-plugin-test"
+          INSPECTOR_ZIP="assemblies/assemblies-hop-geometry-inspector/target/hop-geometry-inspector-plugin-0.1.0-SNAPSHOT.zip"
+          GEOMETRY_ZIP="geometry-type-source/assemblies/assemblies-hop-geometry-type/target/hop-geometry-type-plugin-0.1.0-SNAPSHOT.zip"
+
+          rm -rf "$INSTALL_ROOT"
+          mkdir -p "$INSTALL_ROOT"
+          test -f "$INSPECTOR_ZIP"
+          test -f "$GEOMETRY_ZIP"
+
+          unzip -q "$GEOMETRY_ZIP" -d "$INSTALL_ROOT"
+          unzip -q "$INSPECTOR_ZIP" -d "$INSTALL_ROOT"
+
+          test -d "$INSTALL_ROOT/plugins/misc/hop-geometry-type"
+          test -d "$INSTALL_ROOT/plugins/misc/hop-geometry-inspector"
+
+          mvn -U -B -ntp -pl integration-tests \
+            -Dgeometry.inspector.plugins.dir="$INSTALL_ROOT/plugins" \
+            test
