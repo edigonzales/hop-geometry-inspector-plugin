@@ -18,11 +18,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Java 23
+      - name: Checkout geometry type plugin
+        uses: actions/checkout@v4
+        with:
+          repository: edigonzales/hop-geometry-type-plugin
+          ref: main
+          path: geometry-type-source
+
+      - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "23"
+          java-version: "21"
+          cache: maven
+
+      - name: Install geometry type dependency
+        shell: bash
+        run: mvn -U -B -ntp -f geometry-type-source/pom.xml -DskipTests -pl hop-geometry-type -am install
 
       - name: Build plugin ZIP
         shell: bash
