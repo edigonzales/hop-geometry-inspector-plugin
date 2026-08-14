@@ -5,7 +5,6 @@ import ch.so.agi.hop.geometry.inspector.model.GeometryInspectionSide;
 import ch.so.agi.hop.geometry.inspector.model.SamplingMode;
 import ch.so.agi.hop.geometry.inspector.model.SamplingResult;
 import java.util.List;
-import org.apache.commons.lang.StringUtils;
 import org.apache.hop.core.exception.HopException;
 import org.apache.hop.core.exception.HopTransformException;
 import org.apache.hop.core.row.IRowMeta;
@@ -46,7 +45,7 @@ public class LocalGeometryPipelineSamplerExecutor implements GeometryPipelineSam
 
     for (String parameterName : previewPipeline.listParameters()) {
       String value = variables.getVariable(parameterName);
-      if (StringUtils.isEmpty(value)) {
+      if (value == null || value.isEmpty()) {
         value = previewPipeline.getParameterDefault(parameterName);
       }
       pipeline.setParameterValue(parameterName, value);

@@ -44,7 +44,8 @@ public class GeometrySamplerService {
       GeometryInspectorOptions options)
       throws HopException, InterruptedException {
     PipelineMeta previewPipeline =
-        previewPipelinePruner.cloneAndKeepUpstream(sourcePipeline, targetTransformName);
+        previewPipelinePruner.cloneAndKeepUpstream(
+            sourcePipeline, variables, metadataProvider, targetTransformName);
     return samplerExecutor.execute(
         previewPipeline, variables, metadataProvider, targetTransformName, options);
   }

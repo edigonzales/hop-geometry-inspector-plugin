@@ -2,7 +2,6 @@ package ch.so.agi.hop.geometry.inspector.sampling;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import ch.so.agi.hop.geometry.inspector.PreviewPipelinePruner;
 import ch.so.agi.hop.geometry.inspector.model.GeometryInspectionSide;
 import ch.so.agi.hop.geometry.inspector.model.GeometryInspectorOptions;
 import ch.so.agi.hop.geometry.inspector.model.SamplingMode;
@@ -17,6 +16,7 @@ import org.apache.hop.core.row.IRowMeta;
 import org.apache.hop.core.row.RowMeta;
 import org.apache.hop.core.row.value.ValueMetaString;
 import org.apache.hop.core.variables.Variables;
+import org.apache.hop.metadata.serializer.memory.MemoryMetadataProvider;
 import org.apache.hop.pipeline.Pipeline;
 import org.apache.hop.pipeline.PipelineHopMeta;
 import org.apache.hop.pipeline.PipelineMeta;
@@ -26,6 +26,7 @@ import org.apache.hop.pipeline.transform.BaseTransformMeta;
 import org.apache.hop.pipeline.transform.ITransformIOMeta;
 import org.apache.hop.pipeline.transform.TransformIOMeta;
 import org.apache.hop.pipeline.transform.TransformMeta;
+import org.apache.hop.pipeline.transforms.dummy.DummyMeta;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -66,24 +67,23 @@ class LocalGeometryPipelineSamplerExecutorTest {
   }
 
   private SamplingResult sample(GeometryInspectionSide side) throws Exception {
-    GeometrySamplerService service =
-        new GeometrySamplerService(
-            new PreviewPipelinePruner(), new LocalGeometryPipelineSamplerExecutor());
-
-    return service.sample(
-        createPipeline(),
-        new Variables(),
-        null,
-        "Target",
-        new GeometryInspectorOptions(1, SamplingMode.FIRST, side, "geometry", Duration.ofSeconds(5)));
+    Variables variables = new Variables();
+    return new LocalGeometryPipelineSamplerExecutor()
+        .execute(
+            createPipeline(),
+            variables,
+            new MemoryMetadataProvider(),
+            "Target",
+            new GeometryInspectorOptions(
+                1, SamplingMode.FIRST, side, "geometry", Duration.ofSeconds(5)));
   }
 
   private PipelineMeta createPipeline() {
     PipelineMeta pipelineMeta = new PipelineMeta();
     TransformMeta source = new TransformMeta("Source", new TestSourceMeta());
     TransformMeta target = new TransformMeta("Target", new RoutedTargetMeta("RejectSink"));
-    TransformMeta mainSink = new TransformMeta("MainSink", null);
-    TransformMeta rejectSink = new TransformMeta("RejectSink", null);
+    TransformMeta mainSink = new TransformMeta("Dummy", "MainSink", new DummyMeta());
+    TransformMeta rejectSink = new TransformMeta("Dummy", "RejectSink", new DummyMeta());
 
     pipelineMeta.addTransform(source);
     pipelineMeta.addTransform(target);
