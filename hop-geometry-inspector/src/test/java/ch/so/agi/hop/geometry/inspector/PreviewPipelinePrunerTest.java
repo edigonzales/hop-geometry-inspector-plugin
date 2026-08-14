@@ -29,10 +29,10 @@ class PreviewPipelinePrunerTest {
     PipelineMeta pipelineMeta = new PipelineMeta();
     pipelineMeta.setMetadataProvider(metadataProvider);
 
-    TransformMeta input = new TransformMeta("Input", new DummyMeta());
-    TransformMeta branch = new TransformMeta("Branch", new DummyMeta());
-    TransformMeta target = new TransformMeta("Target", new DummyMeta());
-    TransformMeta downstream = new TransformMeta("Downstream", new DummyMeta());
+    TransformMeta input = new TransformMeta("Dummy", "Input", new DummyMeta());
+    TransformMeta branch = new TransformMeta("Dummy", "Branch", new DummyMeta());
+    TransformMeta target = new TransformMeta("Dummy", "Target", new DummyMeta());
+    TransformMeta downstream = new TransformMeta("Dummy", "Downstream", new DummyMeta());
 
     pipelineMeta.addTransform(input);
     pipelineMeta.addTransform(branch);
