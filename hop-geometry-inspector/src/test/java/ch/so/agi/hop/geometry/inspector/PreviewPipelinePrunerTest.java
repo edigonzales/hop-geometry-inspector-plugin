@@ -4,20 +4,35 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.apache.hop.core.HopEnvironment;
+import org.apache.hop.core.variables.IVariables;
+import org.apache.hop.core.variables.Variables;
+import org.apache.hop.metadata.serializer.memory.MemoryMetadataProvider;
 import org.apache.hop.pipeline.PipelineHopMeta;
 import org.apache.hop.pipeline.PipelineMeta;
 import org.apache.hop.pipeline.transform.TransformMeta;
+import org.apache.hop.pipeline.transforms.dummy.DummyMeta;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 class PreviewPipelinePrunerTest {
 
+  @BeforeAll
+  static void initializeHop() throws Exception {
+    HopEnvironment.init();
+  }
+
   @Test
-  void keepsOnlyTargetAndUpstreamTransforms() {
+  void keepsOnlyTargetAndUpstreamTransformsAfterXmlCopy() throws Exception {
+    IVariables variables = Variables.getADefaultVariableSpace();
+    MemoryMetadataProvider metadataProvider = new MemoryMetadataProvider();
     PipelineMeta pipelineMeta = new PipelineMeta();
-    TransformMeta input = new TransformMeta("Input", null);
-    TransformMeta branch = new TransformMeta("Branch", null);
-    TransformMeta target = new TransformMeta("Target", null);
-    TransformMeta downstream = new TransformMeta("Downstream", null);
+    pipelineMeta.setMetadataProvider(metadataProvider);
+
+    TransformMeta input = new TransformMeta("Input", new DummyMeta());
+    TransformMeta branch = new TransformMeta("Branch", new DummyMeta());
+    TransformMeta target = new TransformMeta("Target", new DummyMeta());
+    TransformMeta downstream = new TransformMeta("Downstream", new DummyMeta());
 
     pipelineMeta.addTransform(input);
     pipelineMeta.addTransform(branch);
@@ -29,8 +44,10 @@ class PreviewPipelinePrunerTest {
     pipelineMeta.addPipelineHop(new PipelineHopMeta(target, downstream));
 
     PreviewPipelinePruner pruner = new PreviewPipelinePruner();
-    PipelineMeta pruned = pruner.cloneAndKeepUpstream(pipelineMeta, "Target");
+    PipelineMeta pruned =
+        pruner.cloneAndKeepUpstream(pipelineMeta, variables, metadataProvider, "Target");
 
+    assertThat(pruned).isNotSameAs(pipelineMeta);
     Set<String> remainingTransformNames =
         pruned.getTransforms().stream().map(TransformMeta::getName).collect(Collectors.toSet());
 
