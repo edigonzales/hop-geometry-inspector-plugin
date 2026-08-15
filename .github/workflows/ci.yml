@@ -51,6 +51,49 @@ jobs:
             exit 1
           fi
 
+      - name: Verify GeoTools 35 CRS runtime packaging
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import io
+          import pathlib
+          import zipfile
+
+          archive = pathlib.Path("assemblies/assemblies-hop-geometry-inspector/target/hop-geometry-inspector-plugin-0.1.0-SNAPSHOT.zip")
+          with zipfile.ZipFile(archive) as plugin:
+              names = plugin.namelist()
+              required_suffixes = (
+                  "/lib/gt-main.jar",
+                  "/lib/gt-referencing.jar",
+                  "/lib/gt-epsg-hsql.jar",
+                  "/lib/indriya.jar",
+                  "/lib/unit-api.jar",
+                  "/lib/systems-common.jar",
+              )
+              for suffix in required_suffixes:
+                  if not any(name.endswith(suffix) for name in names):
+                      raise SystemExit(f"Missing Inspector runtime dependency matching {suffix}")
+
+              gt_main_name = next(name for name in names if name.endswith("/lib/gt-main.jar"))
+              with zipfile.ZipFile(io.BytesIO(plugin.read(gt_main_name))) as gt_main:
+                  properties_name = "META-INF/maven/org.geotools/gt-main/pom.properties"
+                  properties = gt_main.read(properties_name).decode("iso-8859-1")
+                  if "version=35.0" not in properties:
+                      raise SystemExit(f"Inspector must package GeoTools 35.0, got:\n{properties}")
+
+              indriya_name = next(name for name in names if name.endswith("/lib/indriya.jar"))
+              with zipfile.ZipFile(io.BytesIO(plugin.read(indriya_name))) as indriya:
+                  service = "META-INF/services/tech.units.indriya.spi.NumberSystem"
+                  if service not in indriya.namelist():
+                      raise SystemExit(f"Indriya NumberSystem service metadata missing from {indriya_name}")
+                  provider = indriya.read(service).decode("utf-8")
+                  if "tech.units.indriya.function.DefaultNumberSystem" not in provider:
+                      raise SystemExit(f"DefaultNumberSystem provider missing from {service}")
+
+          print("Inspector GeoTools 35 CRS runtime packaging OK")
+          PY
+
       - name: Build geometry type install ZIP
         run: mvn -U -B -ntp -f geometry-type-source/pom.xml -DskipTests package
 
