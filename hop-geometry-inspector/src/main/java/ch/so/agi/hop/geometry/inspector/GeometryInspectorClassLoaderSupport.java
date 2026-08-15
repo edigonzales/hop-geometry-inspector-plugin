@@ -24,11 +24,13 @@ public final class GeometryInspectorClassLoaderSupport {
     ClassLoader originalClassLoader = currentThread.getContextClassLoader();
 
     if (pluginClassLoader == null || pluginClassLoader == originalClassLoader) {
+      GeoToolsRuntimeSupport.initialize();
       return supplier.get();
     }
 
     currentThread.setContextClassLoader(pluginClassLoader);
     try {
+      GeoToolsRuntimeSupport.initialize();
       return supplier.get();
     } finally {
       currentThread.setContextClassLoader(originalClassLoader);
@@ -58,12 +60,14 @@ public final class GeometryInspectorClassLoaderSupport {
               ClassLoader originalClassLoader = currentThread.getContextClassLoader();
 
               if (pluginClassLoader == null || pluginClassLoader == originalClassLoader) {
+                GeoToolsRuntimeSupport.initialize();
                 runnable.run();
                 return;
               }
 
               currentThread.setContextClassLoader(pluginClassLoader);
               try {
+                GeoToolsRuntimeSupport.initialize();
                 runnable.run();
               } finally {
                 currentThread.setContextClassLoader(originalClassLoader);
