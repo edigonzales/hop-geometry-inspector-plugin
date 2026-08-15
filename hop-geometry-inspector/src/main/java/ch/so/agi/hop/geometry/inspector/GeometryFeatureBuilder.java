@@ -5,12 +5,13 @@ import ch.so.agi.hop.geometry.inspector.parsing.GeometryParser;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.ServiceConfigurationError;
 import java.util.Set;
 import org.apache.hop.core.row.IRowMeta;
 import org.apache.hop.core.row.IValueMeta;
-import org.geotools.api.referencing.crs.CoordinateReferenceSystem;
 import org.geotools.api.feature.simple.SimpleFeature;
 import org.geotools.api.feature.simple.SimpleFeatureType;
+import org.geotools.api.referencing.crs.CoordinateReferenceSystem;
 import org.geotools.feature.simple.SimpleFeatureBuilder;
 import org.geotools.feature.simple.SimpleFeatureTypeBuilder;
 import org.geotools.geometry.jts.ReferencedEnvelope;
@@ -25,6 +26,8 @@ public class GeometryFeatureBuilder {
   private final GeometryParser geometryParser = new GeometryParser();
 
   public GeometryBuildResult build(IRowMeta rowMeta, List<Object[]> rows, String geometryField) {
+    GeoToolsRuntimeSupport.initialize();
+
     if (rowMeta == null || rows == null || rows.isEmpty()) {
       return new GeometryBuildResult(
           List.of(),
@@ -86,15 +89,19 @@ public class GeometryFeatureBuilder {
       } else if (positiveSrids.size() > 1) {
         crsStatusMessage =
             "Mixed SRIDs in sample: "
-                + positiveSrids.stream().map(String::valueOf).reduce((left, right) -> left + ", " + right).orElse("");
+                + positiveSrids.stream()
+                    .map(String::valueOf)
+                    .reduce((left, right) -> left + ", " + right)
+                    .orElse("");
       } else {
         detectedSrid = positiveSrids.iterator().next();
         try {
           detectedCrs = CRS.decode("EPSG:" + detectedSrid, true);
           consistentCrs = true;
           crsStatusMessage = "EPSG:" + detectedSrid;
-        } catch (Exception e) {
-          crsStatusMessage = "Unable to decode EPSG:" + detectedSrid;
+        } catch (Exception | LinkageError | ServiceConfigurationError e) {
+          crsStatusMessage =
+              "Unable to decode EPSG:" + detectedSrid + " (" + rootCauseMessage(e) + ")";
         }
       }
     }
