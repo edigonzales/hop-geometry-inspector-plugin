@@ -2,6 +2,15 @@ name: Verify Geometry Inspector plugin
 
 on:
   workflow_call:
+    inputs:
+      dependency-artifact-name:
+        required: false
+        type: string
+        default: ''
+      dependency-version:
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -26,4 +35,11 @@ jobs:
       artifact-name-prefix: hop-geometry-inspector-plugin
       group-id: ch.so.agi
       hop-version: 2.19.0
+      dependency-artifact-name: ${{ inputs.dependency-artifact-name }}
+      dependency-artifact-path: .ci/dependencies
+      dependency-install: ${{ inputs.dependency-artifact-name != '' }}
+      dependency-group-id: ch.so.agi
+      dependency-artifact-id: hop-geometry-type
+      dependency-version: ${{ inputs.dependency-version }}
+      dependency-jar-glob: plugins/misc/hop-geometry-type/*.jar
     secrets: inherit

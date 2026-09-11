@@ -95,11 +95,21 @@ def validate(path: Path, version: str) -> dict[str, object]:
             f"{PLUGIN_ROOT}/lib/gt-render.jar",
             f"{PLUGIN_ROOT}/lib/gt-wms.jar",
             f"{PLUGIN_ROOT}/lib/gt-epsg-hsql.jar",
-            f"{PLUGIN_ROOT}/lib/jts-core.jar",
+            f"{PLUGIN_ROOT}/lib/indriya.jar",
+            f"{PLUGIN_ROOT}/lib/unit-api.jar",
+            f"{PLUGIN_ROOT}/lib/systems-common.jar",
         }
         missing = sorted(required_libraries - set(libraries))
         if missing:
             raise SystemExit(f"Package is missing required runtime libraries: {missing}")
+
+        forbidden_libraries = {
+            f"{PLUGIN_ROOT}/lib/jts-core.jar",
+            f"{PLUGIN_ROOT}/lib/dependencies.xml",
+        }
+        unexpected = sorted(forbidden_libraries & set(files))
+        if unexpected:
+            raise SystemExit(f"Package contains shared-runtime files that must be provided by Geometry Type: {unexpected}")
 
         validate_plugin_jar(plugin_jar_name, archive.read(plugin_jar_name))
 

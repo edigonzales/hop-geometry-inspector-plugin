@@ -14,14 +14,16 @@
   <modules>
     <module>hop-geometry-inspector</module>
     <module>assemblies</module>
+    <module>integration-tests</module>
   </modules>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <maven.compiler.release>21</maven.compiler.release>
     <hop.version>2.19.0</hop.version>
+    <hop.geometry.type.version>0.2.0-SNAPSHOT</hop.geometry.type.version>
     <jts.version>1.20.0</jts.version>
-    <geotools.version>31.3</geotools.version>
+    <geotools.version>35.0</geotools.version>
     <junit.version>5.12.0</junit.version>
     <assertj.version>3.27.3</assertj.version>
     <jandex.plugin.version>3.2.7</jandex.plugin.version>
@@ -34,6 +36,13 @@
 
   <dependencyManagement>
     <dependencies>
+      <dependency>
+        <groupId>org.geotools</groupId>
+        <artifactId>gt-bom</artifactId>
+        <version>${geotools.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
       <dependency>
         <groupId>org.apache.hop</groupId>
         <artifactId>hop-core</artifactId>
@@ -65,6 +74,14 @@
     <repository>
       <id>osgeo</id>
       <url>https://repo.osgeo.org/repository/release/</url>
+    </repository>
+    <repository>
+      <id>sogeo-releases</id>
+      <url>https://jars.interlis.guru/releases/</url>
+    </repository>
+    <repository>
+      <id>sogeo-snapshots</id>
+      <url>https://jars.interlis.guru/snapshots/</url>
     </repository>
   </repositories>
 

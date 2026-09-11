@@ -1,16 +1,15 @@
 package ch.so.agi.hop.geometry.inspector.parsing;
 
-import java.lang.reflect.Method;
+import com.atolcd.hop.core.row.value.GeometryInterface;
+import com.atolcd.hop.gis.geometry.curve.CurveGeometrySupport;
 import java.util.Locale;
 import org.apache.hop.core.row.IValueMeta;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.io.ParseException;
-import org.locationtech.jts.io.WKBReader;
 import org.locationtech.jts.io.WKTReader;
 
 public class GeometryParser {
 
-  private final WKBReader wkbReader = new WKBReader();
   private final WKTReader wktReader = new WKTReader();
 
   public Geometry parseGeometry(IValueMeta valueMeta, Object value) throws Exception {
@@ -18,6 +17,8 @@ public class GeometryParser {
       return null;
     }
 
+    // Geometry values produced by geometry-aware Hop plugins share the sogeo-geometry classloader
+    // with the Inspector. No classloader bridge or WKB roundtrip is needed for live row values.
     if (value instanceof Geometry geometry) {
       return normalizeGeometry(geometry);
     }
@@ -39,47 +40,19 @@ public class GeometryParser {
       return normalizeGeometry(parseString(chars.toString()));
     }
 
-    Exception deferredFailure = null;
-
-    try {
-      Geometry geometryFromStringBridge = parseViaValueMetaString(valueMeta, value);
-      if (geometryFromStringBridge != null) {
-        return normalizeGeometry(geometryFromStringBridge);
-      }
-    } catch (Exception e) {
-      deferredFailure = e;
-    }
-
-    try {
-      Geometry foreignGeometry = parseForeignGeometryObject(value);
-      if (foreignGeometry != null) {
-        return normalizeGeometry(foreignGeometry);
-      }
-    } catch (Exception e) {
-      if (deferredFailure == null) {
-        deferredFailure = e;
-      }
-    }
-
-    if (deferredFailure != null) {
-      throw deferredFailure;
+    Geometry geometryFromStringBridge = parseViaValueMetaString(valueMeta, value);
+    if (geometryFromStringBridge != null) {
+      return normalizeGeometry(geometryFromStringBridge);
     }
 
     throw new ParseException("Unsupported geometry value type: " + value.getClass().getName());
   }
 
   private Geometry parseViaGeometryInterface(IValueMeta valueMeta, Object value) throws Exception {
-    if (valueMeta == null) {
+    if (!(valueMeta instanceof GeometryInterface geometryMeta)) {
       return null;
     }
-    try {
-      Method method = valueMeta.getClass().getMethod("getGeometry", Object.class);
-      method.setAccessible(true);
-      Object geometry = method.invoke(valueMeta, value);
-      return parseGeometryObject(geometry);
-    } catch (NoSuchMethodException ignored) {
-      return null;
-    }
+    return geometryMeta.getGeometry(value);
   }
 
   private Geometry parseViaValueMetaString(IValueMeta valueMeta, Object value) throws Exception {
@@ -93,48 +66,6 @@ public class GeometryParser {
     }
 
     return parseString(text);
-  }
-
-  private Geometry parseGeometryObject(Object value) throws Exception {
-    if (value == null) {
-      return null;
-    }
-
-    if (value instanceof Geometry geometry) {
-      return geometry;
-    }
-
-    if (value instanceof byte[] bytes) {
-      return parseWkb(bytes);
-    }
-
-    if (value instanceof String text) {
-      return parseString(text);
-    }
-
-    if (value instanceof CharSequence chars) {
-      return parseString(chars.toString());
-    }
-
-    return parseForeignGeometryObject(value);
-  }
-
-  private Geometry parseForeignGeometryObject(Object value) throws Exception {
-    if (value == null || !isLikelyForeignJtsGeometry(value)) {
-      return null;
-    }
-
-    String wkt = invokeStringMethod(value, "toText");
-    if (wkt == null || wkt.isBlank()) {
-      return null;
-    }
-
-    Integer srid = invokeIntegerMethod(value, "getSRID");
-    if (srid != null && srid > 0) {
-      return parseWktOrEwkt("SRID=" + srid + ";" + wkt);
-    }
-
-    return parseWktOrEwkt(wkt);
   }
 
   private Geometry parseString(String text) throws Exception {
@@ -170,11 +101,7 @@ public class GeometryParser {
   }
 
   private Geometry parseWkb(byte[] wkb) throws Exception {
-    return wkbReader.read(wkb);
-  }
-
-  private boolean isLikelyForeignJtsGeometry(Object value) {
-    return value.getClass().getName().startsWith("org.locationtech.jts.geom.");
+    return CurveGeometrySupport.readWkb(wkb);
   }
 
   private boolean isLikelyHex(String value) {
@@ -183,9 +110,10 @@ public class GeometryParser {
     }
     for (int i = 0; i < value.length(); i++) {
       char c = value.charAt(i);
-      boolean hex = (c >= '0' && c <= '9')
-          || (c >= 'a' && c <= 'f')
-          || (c >= 'A' && c <= 'F');
+      boolean hex =
+          (c >= '0' && c <= '9')
+              || (c >= 'a' && c <= 'f')
+              || (c >= 'A' && c <= 'F');
       if (!hex) {
         return false;
       }
@@ -205,26 +133,6 @@ public class GeometryParser {
       data[i / 2] = (byte) ((high << 4) + low);
     }
     return data;
-  }
-
-  private String invokeStringMethod(Object target, String methodName) throws Exception {
-    Method method = target.getClass().getMethod(methodName);
-    method.setAccessible(true);
-    Object value = method.invoke(target);
-    return value == null ? null : value.toString();
-  }
-
-  private Integer invokeIntegerMethod(Object target, String methodName) throws Exception {
-    Method method = target.getClass().getMethod(methodName);
-    method.setAccessible(true);
-    Object value = method.invoke(target);
-    if (value == null) {
-      return null;
-    }
-    if (value instanceof Number number) {
-      return number.intValue();
-    }
-    return Integer.valueOf(value.toString());
   }
 
   private Geometry normalizeGeometry(Geometry geometry) {

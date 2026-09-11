@@ -50,6 +50,8 @@ Build prerequisites:
 - Access to:
   - Maven Central
   - OSGeo GeoTools repository (`https://repo.osgeo.org/repository/release/`)
+  - the current `ch.so.agi:hop-geometry-type:0.2.0-SNAPSHOT` artifact from
+    `https://jars.interlis.guru/snapshots/`
 
 The CI compatibility matrix also runs the tests with Java 25 on Ubuntu, macOS and
 Windows. The canonical Ubuntu/Java 21 job is the only job that creates the
@@ -267,6 +269,10 @@ The CI workflow uses the shared `hop-plugin-ci` contract:
 - Ubuntu/Java 21: `mvn -U -B -ntp clean verify` and package validation
 - other matrix cells: `mvn -U -B -ntp clean test`
 - Linux SWT tests run under Xvfb; macOS tests use `-XstartOnFirstThread`
+- the canonical run uses the current Geometry Type `0.2.0-SNAPSHOT`; JTS is
+  supplied by the shared Geometry Type runtime rather than duplicated in this ZIP
+- an installed-plugin classloader test verifies that Geometry Type and Inspector
+  share the runtime classes from a clean temporary plugin tree
 - Pull requests never publish Maven artifacts
 - pushes and manual runs on `main` publish the already verified ZIP without rebuilding
 - the published ZIP is resolved again from an empty Maven cache and compared byte-for-byte

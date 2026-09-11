@@ -10,21 +10,30 @@ import ch.so.agi.hop.geometry.inspector.model.SamplingResult;
 import java.time.Duration;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.apache.hop.core.HopEnvironment;
 import org.apache.hop.core.variables.Variables;
+import org.apache.hop.metadata.serializer.memory.MemoryMetadataProvider;
 import org.apache.hop.pipeline.PipelineHopMeta;
 import org.apache.hop.pipeline.PipelineMeta;
 import org.apache.hop.pipeline.transform.TransformMeta;
+import org.apache.hop.pipeline.transforms.dummy.DummyMeta;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 class GeometrySamplerServiceIntegrationTest {
 
+  @BeforeAll
+  static void initializeHop() throws Exception {
+    HopEnvironment.init();
+  }
+
   @Test
   void samplesUsingPrunedPreviewPipelineAndForwardsOptions() throws Exception {
     PipelineMeta pipelineMeta = new PipelineMeta();
-    TransformMeta input = new TransformMeta("Input", null);
-    TransformMeta branch = new TransformMeta("Branch", null);
-    TransformMeta target = new TransformMeta("Target", null);
-    TransformMeta downstream = new TransformMeta("Downstream", null);
+    TransformMeta input = dummy("Input");
+    TransformMeta branch = dummy("Branch");
+    TransformMeta target = dummy("Target");
+    TransformMeta downstream = dummy("Downstream");
 
     pipelineMeta.addTransform(input);
     pipelineMeta.addTransform(branch);
@@ -37,6 +46,7 @@ class GeometrySamplerServiceIntegrationTest {
 
     StubSamplerExecutor executor = new StubSamplerExecutor();
     GeometrySamplerService service = new GeometrySamplerService(new PreviewPipelinePruner(), executor);
+    MemoryMetadataProvider metadataProvider = new MemoryMetadataProvider();
 
     GeometryInspectorOptions options =
         new GeometryInspectorOptions(
@@ -47,7 +57,7 @@ class GeometrySamplerServiceIntegrationTest {
             Duration.ofSeconds(30));
 
     SamplingResult result =
-        service.sample(pipelineMeta, new Variables(), null, "Target", options);
+        service.sample(pipelineMeta, new Variables(), metadataProvider, "Target", options);
 
     assertThat(result.rows()).hasSize(1);
     assertThat(executor.receivedTargetTransformName).isEqualTo("Target");
@@ -67,10 +77,10 @@ class GeometrySamplerServiceIntegrationTest {
   @Test
   void prunesAlternativeDownstreamPathsBeforeExecution() throws Exception {
     PipelineMeta pipelineMeta = new PipelineMeta();
-    TransformMeta source = new TransformMeta("Source", null);
-    TransformMeta target = new TransformMeta("Target", null);
-    TransformMeta downA = new TransformMeta("DownA", null);
-    TransformMeta downB = new TransformMeta("DownB", null);
+    TransformMeta source = dummy("Source");
+    TransformMeta target = dummy("Target");
+    TransformMeta downA = dummy("DownA");
+    TransformMeta downB = dummy("DownB");
 
     pipelineMeta.addTransform(source);
     pipelineMeta.addTransform(target);
@@ -92,13 +102,18 @@ class GeometrySamplerServiceIntegrationTest {
             "geom",
             Duration.ofSeconds(30));
 
-    service.sample(pipelineMeta, new Variables(), null, "Target", options);
+    service.sample(
+        pipelineMeta, new Variables(), new MemoryMetadataProvider(), "Target", options);
 
     Set<String> transformNames =
         executor.receivedPreviewPipeline.getTransforms().stream()
             .map(TransformMeta::getName)
             .collect(Collectors.toSet());
     assertThat(transformNames).containsExactlyInAnyOrder("Source", "Target");
+  }
+
+  private static TransformMeta dummy(String name) {
+    return new TransformMeta("Dummy", name, new DummyMeta());
   }
 
   private static class StubSamplerExecutor implements GeometryPipelineSamplerExecutor {

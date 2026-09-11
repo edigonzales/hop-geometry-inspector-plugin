@@ -3,12 +3,17 @@ package ch.so.agi.hop.geometry.inspector;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.so.agi.hop.geometry.inspector.model.GeometryBuildResult;
+import com.atolcd.hop.gis.geometry.curve.CircularString;
+import com.atolcd.hop.gis.geometry.curve.CurveGeometrySupport;
+import com.atolcd.hop.gis.geometry.curve.CurvePolygon;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.List;
 import org.apache.hop.core.row.RowMeta;
 import org.apache.hop.core.row.value.ValueMetaString;
 import org.junit.jupiter.api.Test;
+import org.locationtech.jts.geom.Coordinate;
+import org.locationtech.jts.geom.GeometryFactory;
 
 class GeometryFeatureBuilderTest {
 
@@ -37,6 +42,42 @@ class GeometryFeatureBuilderTest {
     assertThat(result.extent().isEmpty()).isFalse();
     assertThat(result.hasUsableCrs()).isFalse();
     assertThat(result.crsStatusMessage()).isEqualTo("No positive SRID on sampled geometries");
+  }
+
+  @Test
+  void buildsRenderableFeatureFromTrueCurveWkb() {
+    GeometryFeatureBuilder featureBuilder = new GeometryFeatureBuilder();
+    GeometryFactory factory = new GeometryFactory();
+    CircularString ring =
+        new CircularString(
+            new Coordinate[] {
+              new Coordinate(0, 0),
+              new Coordinate(4, 0),
+              new Coordinate(4, 4),
+              new Coordinate(0, 4),
+              new Coordinate(0, 0)
+            },
+            factory);
+    CurvePolygon curvePolygon = new CurvePolygon(List.of(ring), factory);
+    curvePolygon.setSRID(2056);
+
+    RowMeta rowMeta = new RowMeta();
+    rowMeta.addValueMeta(new ValueMetaString("geom"));
+
+    GeometryBuildResult result =
+        featureBuilder.build(
+            rowMeta,
+            List.<Object[]>of(new Object[] {CurveGeometrySupport.writeWkb(curvePolygon)}),
+            "geom");
+
+    assertThat(result.features()).hasSize(1);
+    assertThat(result.parseErrors()).isZero();
+    assertThat(result.detectedSrid()).isEqualTo(2056);
+    assertThat(result.features().get(0).getDefaultGeometry()).isInstanceOf(CurvePolygon.class);
+    CurvePolygon rendered = (CurvePolygon) result.features().get(0).getDefaultGeometry();
+    assertThat(rendered.getCurveRings().get(0)).isInstanceOf(CircularString.class);
+    assertThat(rendered.getNumPoints()).isGreaterThan(5);
+    assertThat(result.extent().isEmpty()).isFalse();
   }
 
   @Test
