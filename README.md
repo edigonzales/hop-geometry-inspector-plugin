@@ -1,6 +1,6 @@
 # hop-geometry-inspector-plugin
 
-Apache Hop 2.17 Desktop GUI plugin for visual geometry inspection (`Inspect geometries...`) on transform outputs.
+Apache Hop 2.19 Desktop GUI plugin for visual geometry inspection (`Inspect geometries...`) on transform outputs.
 
 ## Implemented scope
 
@@ -46,10 +46,14 @@ mvn -pl hop-geometry-inspector -am -DskipTests package
 
 Build prerequisites:
 
-- Java 17 compatible toolchain (`maven.compiler.release=17`)
+- Java 21 compatible toolchain (`maven.compiler.release=21`)
 - Access to:
   - Maven Central
   - OSGeo GeoTools repository (`https://repo.osgeo.org/repository/release/`)
+
+The CI compatibility matrix also runs the tests with Java 25 on Ubuntu, macOS and
+Windows. The canonical Ubuntu/Java 21 job is the only job that creates the
+publishable ZIP bundle.
 
 ## Install in Hop
 
@@ -245,3 +249,34 @@ This message can appear in test runs and is expected in a plain Maven test envir
 4. Robustness:
    - Verify multiple geometry fields can be switched in viewer.
    - Verify fallback dialog appears if Swing viewer cannot initialize.
+
+## Maven artifact and CI
+
+The installable ZIP is published as a normal Maven snapshot artifact:
+
+- `ch.so.agi:hop-geometry-inspector-plugin:0.1.0-SNAPSHOT` (`zip`)
+
+Consumers use the base `0.1.0-SNAPSHOT` version. Maven resolves the current
+snapshot through repository metadata; timestamped snapshot filenames are not
+part of this repository's configuration. The snapshot repository is:
+`https://jars.interlis.guru/snapshots/`.
+
+The CI workflow uses the shared `hop-plugin-ci` contract:
+
+- Ubuntu, macOS and Windows with Java 21 and 25
+- Ubuntu/Java 21: `mvn -U -B -ntp clean verify` and package validation
+- other matrix cells: `mvn -U -B -ntp clean test`
+- Linux SWT tests run under Xvfb; macOS tests use `-XstartOnFirstThread`
+- Pull requests never publish Maven artifacts
+- pushes and manual runs on `main` publish the already verified ZIP without rebuilding
+- the published ZIP is resolved again from an empty Maven cache and compared byte-for-byte
+
+Run the local package validation with:
+
+```bash
+mvn -U -B -ntp clean verify
+python3 scripts/verify-package.py
+```
+
+The Maven publication uses the protected secrets `INTERLIS_MAVEN_USERNAME` and
+`INTERLIS_MAVEN_TOKEN`. Plugin GitHub Releases are not used.

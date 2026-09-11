@@ -18,13 +18,14 @@
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <maven.compiler.release>17</maven.compiler.release>
-    <hop.version>2.17.0</hop.version>
+    <maven.compiler.release>21</maven.compiler.release>
+    <hop.version>2.19.0</hop.version>
     <jts.version>1.20.0</jts.version>
     <geotools.version>31.3</geotools.version>
     <junit.version>5.12.0</junit.version>
     <assertj.version>3.27.3</assertj.version>
     <jandex.plugin.version>3.2.7</jandex.plugin.version>
+    <ui.test.argLine></ui.test.argLine>
     <maven.compiler.version>3.14.0</maven.compiler.version>
     <maven.surefire.version>3.5.2</maven.surefire.version>
     <maven.assembly.version>3.7.1</maven.assembly.version>
@@ -80,6 +81,9 @@
         <plugin>
           <artifactId>maven-surefire-plugin</artifactId>
           <version>${maven.surefire.version}</version>
+          <configuration>
+            <argLine>${ui.test.argLine}</argLine>
+          </configuration>
         </plugin>
         <plugin>
           <artifactId>maven-jar-plugin</artifactId>
@@ -92,4 +96,31 @@
       </plugins>
     </pluginManagement>
   </build>
+
+  <profiles>
+    <profile>
+      <id>mac-arm64</id>
+      <activation>
+        <os>
+          <family>mac</family>
+          <arch>aarch64</arch>
+        </os>
+      </activation>
+      <properties>
+        <ui.test.argLine>-XstartOnFirstThread</ui.test.argLine>
+      </properties>
+    </profile>
+    <profile>
+      <id>mac-intel</id>
+      <activation>
+        <os>
+          <family>mac</family>
+          <arch>x86_64</arch>
+        </os>
+      </activation>
+      <properties>
+        <ui.test.argLine>-XstartOnFirstThread</ui.test.argLine>
+      </properties>
+    </profile>
+  </profiles>
 </project>
