@@ -94,6 +94,8 @@ def validate(path: Path, version: str) -> dict[str, object]:
             f"{PLUGIN_ROOT}/lib/gt-main.jar",
             f"{PLUGIN_ROOT}/lib/gt-render.jar",
             f"{PLUGIN_ROOT}/lib/gt-wms.jar",
+            f"{PLUGIN_ROOT}/lib/gt-wmts.jar",
+            f"{PLUGIN_ROOT}/lib/gt-tile-client.jar",
             f"{PLUGIN_ROOT}/lib/gt-epsg-hsql.jar",
             f"{PLUGIN_ROOT}/lib/indriya.jar",
             f"{PLUGIN_ROOT}/lib/unit-api.jar",
@@ -110,6 +112,17 @@ def validate(path: Path, version: str) -> dict[str, object]:
         unexpected = sorted(forbidden_libraries & set(files))
         if unexpected:
             raise SystemExit(f"Package contains shared-runtime files that must be provided by Geometry Type: {unexpected}")
+
+        # Assembly names omit versions; inspect each GeoTools JAR manifest instead.
+        expected_geotools = ET.parse(ROOT / "pom.xml").getroot().findtext(
+            f"{POM_NAMESPACE}properties/{POM_NAMESPACE}geotools.version"
+        )
+        for library in libraries:
+            if Path(library).name.startswith("gt-"):
+                with zipfile.ZipFile(io.BytesIO(archive.read(library))) as jar:
+                    manifest = jar.read("META-INF/MANIFEST.MF").decode("utf-8")
+                    if f"Project-Version: {expected_geotools}" not in manifest.splitlines():
+                        raise SystemExit(f"Unexpected GeoTools version in {library}")
 
         validate_plugin_jar(plugin_jar_name, archive.read(plugin_jar_name))
 

@@ -44,6 +44,12 @@
   </dependencies>
 
   <build>
+    <testResources>
+      <testResource>
+        <directory>../hop-geometry-inspector/src/test/resources</directory>
+        <includes><include>wmts/capabilities.xml</include></includes>
+      </testResource>
+    </testResources>
     <plugins>
       <plugin>
         <artifactId>maven-compiler-plugin</artifactId>

@@ -82,6 +82,13 @@ class InstalledPluginClassLoaderTest {
 
       assertThat(inspectorLoader).isSameAs(geometryLoader);
 
+      Class<?> wmtsServer = inspectorLoader.loadClass("org.geotools.ows.wmts.WebMapTileServer");
+      Class<?> wmtsParser =
+          inspectorLoader.loadClass("org.geotools.ows.wmts.response.WMTSGetCapabilitiesResponse");
+      assertThat(wmtsServer.getClassLoader()).isSameAs(inspectorLoader);
+      assertThat(wmtsParser.getClassLoader()).isSameAs(inspectorLoader);
+      assertWmtsCapabilitiesParse(inspectorLoader, wmtsParser);
+
       Class<?> valueMetaGeometry = geometryLoader.loadClass(VALUE_META_GEOMETRY_CLASS);
       Class<?> inspectorGui = inspectorLoader.loadClass(INSPECTOR_GUI_CLASS);
       Class<?> geometryFromGeometryLoader = geometryLoader.loadClass(JTS_GEOMETRY_CLASS);
@@ -102,6 +109,40 @@ class InstalledPluginClassLoaderTest {
       } else {
         System.setProperty(Const.HOP_PLUGIN_BASE_FOLDERS, previousPluginFolders);
       }
+    }
+  }
+
+  private void assertWmtsCapabilitiesParse(ClassLoader loader, Class<?> parser) throws Exception {
+    byte[] xml;
+    try (var stream = getClass().getResourceAsStream("/wmts/capabilities.xml")) {
+      xml =
+          new String(stream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
+              .formatted("http://127.0.0.1", "")
+              .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    }
+    Class<?> responseType = loader.loadClass("org.geotools.http.HTTPResponse");
+    Object response =
+        java.lang.reflect.Proxy.newProxyInstance(
+            loader,
+            new Class<?>[] {responseType},
+            (proxy, method, args) ->
+                switch (method.getName()) {
+                  case "getResponseStream" -> new java.io.ByteArrayInputStream(xml);
+                  case "getContentType" -> "application/xml";
+                  case "getResponseCharset" -> "UTF-8";
+                  default -> null;
+                });
+    Thread thread = Thread.currentThread();
+    ClassLoader previous = thread.getContextClassLoader();
+    try {
+      thread.setContextClassLoader(loader);
+      Object parsed = parser.getConstructor(responseType).newInstance(response);
+      Object capabilities = parser.getMethod("getCapabilities").invoke(parsed);
+      List<?> layers =
+          (List<?>) capabilities.getClass().getMethod("getLayerList").invoke(capabilities);
+      assertThat(layers).hasSize(1);
+    } finally {
+      thread.setContextClassLoader(previous);
     }
   }
 

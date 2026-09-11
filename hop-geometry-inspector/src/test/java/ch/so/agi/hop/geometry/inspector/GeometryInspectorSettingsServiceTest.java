@@ -38,7 +38,41 @@ class GeometryInspectorSettingsServiceTest {
     assertThat(loaded.isValid()).isTrue();
   }
 
-  private static final class InMemorySettingsStore implements GeometryInspectorSettingsService.SettingsStore {
+  @Test
+  void missingServiceTypeLoadsLegacyWms() {
+    var store = new InMemorySettingsStore();
+    store.set(GeometryInspectorSettingsService.KEY_SERVICE_URL, "https://example.org/wms");
+    store.set(GeometryInspectorSettingsService.KEY_LAYER_NAMES, "one,two");
+    var loaded = new GeometryInspectorSettingsService(store).loadBackgroundMapConfig();
+    assertThat(loaded.serviceType())
+        .isEqualTo(GeometryInspectorBackgroundMapConfig.ServiceType.WMS);
+    assertThat(loaded.parsedLayerNames()).containsExactly("one", "two");
+  }
+
+  @Test
+  void wmtsRoundTripPreservesDimensionsAndClearRemovesThem() {
+    var service = new GeometryInspectorSettingsService(new InMemorySettingsStore());
+    var config =
+        new GeometryInspectorBackgroundMapConfig(
+            "https://example.org/caps.xml",
+            "base",
+            "default",
+            "image/jpeg",
+            "1.0.0",
+            true,
+            false,
+            GeometryInspectorBackgroundMapConfig.ServiceType.WMTS,
+            "national-grid",
+            Map.of("Elevation", "1 & 2=3", "Dimension ä", "a+b/c"));
+    service.saveBackgroundMapConfig(config);
+    assertThat(service.loadBackgroundMapConfig()).isEqualTo(config);
+    service.saveBackgroundMapConfig(GeometryInspectorBackgroundMapConfig.empty());
+    assertThat(service.loadBackgroundMapConfig())
+        .isEqualTo(GeometryInspectorBackgroundMapConfig.empty());
+  }
+
+  private static final class InMemorySettingsStore
+      implements GeometryInspectorSettingsService.SettingsStore {
     private final Map<String, String> values = new HashMap<>();
 
     @Override

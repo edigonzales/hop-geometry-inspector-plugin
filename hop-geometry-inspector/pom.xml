@@ -52,6 +52,10 @@
       <groupId>org.geotools</groupId>
       <artifactId>gt-epsg-hsql</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.geotools</groupId>
+      <artifactId>gt-wmts</artifactId>
+    </dependency>
     <!-- GeoTools 35 uses Indriya 2.2. It is referenced directly by GeoToolsRuntimeSupport. -->
     <dependency>
       <groupId>tech.units</groupId>

@@ -17,11 +17,11 @@ Apache Hop 2.19 Desktop GUI plugin for visual geometry inspection (`Inspect geom
   - WKB (bytes/hex)
   - WKT/EWKT
 - Viewer:
-  - separate Swing window (`JMapPane`)
+  - separate SWT window with independently rendered geometry and background images
   - zoom/pan/reset extent tools
   - default styles for point/line/polygon families
   - status line with sampled rows, parsed features, parse errors, partial/full
-- SWT fallback summary dialog if Swing/GeoTools initialization fails
+- SWT fallback summary dialog if SWT/GeoTools initialization fails
 
 ## Modules
 
@@ -168,6 +168,44 @@ In short:
 - For the WMS, it uses the one common CRS detected for the whole sampled result set.
 - If there is no single consistent CRS across the sample, no WMS request is sent.
 
+## WMS and WMTS background maps
+
+The plugin uses **GeoTools 35.1**. In the background map settings, choose WMS or WMTS.
+Existing settings without a service type continue to load as WMS.
+
+For WMTS, enter the complete GetCapabilities document URL and click **Load layers**.
+Select one layer, style and PNG/JPEG format. **Automatic (match geometry CRS)** selects
+an advertised TileMatrixSet in the geometry CRS; you can also select a particular set.
+A mismatched CRS is reported without transforming geometries or reprojecting the raster.
+
+For example, with EPSG:2056 geometries use:
+`https://wmts.geo.admin.ch/EPSG/2056/1.0.0/WMTSCapabilities.xml`
+and select `ch.swisstopo.pixelkarte-farbe` or another suitable layer.
+
+REST ResourceURL templates are preferred; KVP GetTile is supported when no matching
+REST template exists. Time and other dimensions use the service defaults, displayed
+in the dialog and refreshed when the background is reinitialized. Only dimensions
+without defaults require an entered value. Cancel leaves saved settings unchanged.
+
+Free zoom and HiDPI displays are supported by choosing the next finer available tile
+resolution and scaling to the physical viewport pixels. Four downloads run at most
+concurrently, with five-second connect and ten-second read timeouts. Each viewer
+reuses up to 64 MiB of decoded tiles in memory; there is no offline cache.
+Missing tiles remain transparent and the status reports an incomplete background.
+Toggle the background off and on to retry and reload capabilities. The geometry
+overlay remains usable during loading and errors.
+
+For manual verification, compare known LV95 geometries with the reference background,
+then pan and zoom rapidly, resize the window and repeat at Retina/HiDPI scaling.
+Also verify the existing WMS configuration. Automated WMTS tests use local HTTP fixtures
+and do not depend on geo.admin.ch availability. The opt-in SWT dialog smoke test can be run
+on an interactive desktop with:
+
+```bash
+mvn -pl hop-geometry-inspector -am -Dtest=BackgroundMapDialogSmokeTest \
+  -DgeometryInspector.swtSmoke=true -Dsurefire.failIfNoSpecifiedTests=false test
+```
+
 ## Sampling and source selection
 
 The inspector runs a preview on a pruned clone of the pipeline. All upstream transforms and the
@@ -250,7 +288,7 @@ This message can appear in test runs and is expected in a plain Maven test envir
    - Verify status metrics (rows/features/errors, partial/full).
 4. Robustness:
    - Verify multiple geometry fields can be switched in viewer.
-   - Verify fallback dialog appears if Swing viewer cannot initialize.
+   - Verify fallback dialog appears if SWT viewer cannot initialize.
 
 ## Maven artifact and CI
 

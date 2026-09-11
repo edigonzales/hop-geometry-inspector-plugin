@@ -2,7 +2,6 @@ package ch.so.agi.hop.geometry.inspector.ui;
 
 import ch.so.agi.hop.geometry.inspector.model.GeometryInspectorBackgroundMapConfig;
 import java.awt.image.BufferedImage;
-import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.util.ArrayList;
@@ -14,7 +13,27 @@ import org.geotools.ows.wms.WebMapServer;
 import org.geotools.ows.wms.request.GetMapRequest;
 import org.geotools.ows.wms.response.GetMapResponse;
 
-final class GeometryInspectorBackgroundMapClient {
+final class GeometryInspectorBackgroundMapClient implements BackgroundMapClient {
+
+  @Override
+  public GeometryInspectorBackgroundMapConfig cacheConfig(Integer srid) {
+    return config;
+  }
+
+  @Override
+  public BackgroundRenderResult render(BackgroundRenderRequest request) throws Exception {
+    return new BackgroundRenderResult(
+        render(
+            request.displayArea(),
+            request.logicalWidth(),
+            request.logicalHeight(),
+            request.deviceZoom(),
+            request.outputDpi(),
+            request.srid(),
+            request.revision()),
+        config,
+        "");
+  }
 
   enum InitializationState {
     UNINITIALIZED,
@@ -55,15 +74,15 @@ final class GeometryInspectorBackgroundMapClient {
     return initializationState;
   }
 
-  boolean hasInitializationFailure() {
+  public boolean hasInitializationFailure() {
     return initializationState == InitializationState.FAILED;
   }
 
-  String initializationFailureMessage() {
+  public String initializationFailureMessage() {
     return initializationErrorMessage;
   }
 
-  void resetInitialization() {
+  public void resetInitialization() {
     webMapServer = null;
     resolvedLayers = null;
     initializationState = InitializationState.UNINITIALIZED;
@@ -111,7 +130,8 @@ final class GeometryInspectorBackgroundMapClient {
       throw new IllegalStateException("Background map is not configured");
     }
     RequestParameters parameters =
-        buildRequestParameters(displayArea, logicalWidth, logicalHeight, deviceZoom, outputDpi, srid);
+        buildRequestParameters(
+            displayArea, logicalWidth, logicalHeight, deviceZoom, outputDpi, srid);
     if (parameters.displayArea() == null || parameters.srsCode().isBlank()) {
       throw new IllegalStateException("Background map requires a renderable extent and EPSG code");
     }
@@ -152,8 +172,7 @@ final class GeometryInspectorBackgroundMapClient {
       request.setVendorSpecificParameter("DPI", Integer.toString(parameters.outputDpi()));
       request.setVendorSpecificParameter(
           "MAP_RESOLUTION", Integer.toString(parameters.outputDpi()));
-      request.setVendorSpecificParameter(
-          "FORMAT_OPTIONS", "dpi:" + parameters.outputDpi());
+      request.setVendorSpecificParameter("FORMAT_OPTIONS", "dpi:" + parameters.outputDpi());
     }
 
     for (org.geotools.ows.wms.Layer layer : layers) {
@@ -166,7 +185,9 @@ final class GeometryInspectorBackgroundMapClient {
   }
 
   private synchronized void ensureInitialized() throws Exception {
-    if (initializationState == InitializationState.READY && webMapServer != null && resolvedLayers != null) {
+    if (initializationState == InitializationState.READY
+        && webMapServer != null
+        && resolvedLayers != null) {
       return;
     }
     if (initializationState == InitializationState.FAILED) {
@@ -182,8 +203,7 @@ final class GeometryInspectorBackgroundMapClient {
             webMapServer.getCapabilities().getLayerList().stream()
                 .filter(layer -> layerName.equals(layer.getName()))
                 .findFirst()
-                .orElseThrow(
-                    () -> new IllegalStateException("WMS layer not found: " + layerName)));
+                .orElseThrow(() -> new IllegalStateException("WMS layer not found: " + layerName)));
       }
       initializationState = InitializationState.READY;
       initializationErrorMessage = "";

@@ -2,6 +2,7 @@ package ch.so.agi.hop.geometry.inspector.model;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 public record GeometryInspectorBackgroundMapConfig(
@@ -11,9 +12,41 @@ public record GeometryInspectorBackgroundMapConfig(
     String imageFormat,
     String version,
     boolean transparent,
-    boolean enabledByDefault) {
+    boolean enabledByDefault,
+    ServiceType serviceType,
+    String tileMatrixSet,
+    Map<String, String> dimensions) {
+
+  public enum ServiceType {
+    WMS,
+    WMTS
+  }
+
+  public GeometryInspectorBackgroundMapConfig(
+      String serviceUrl,
+      String layerNames,
+      String styleName,
+      String imageFormat,
+      String version,
+      boolean transparent,
+      boolean enabledByDefault) {
+    this(
+        serviceUrl,
+        layerNames,
+        styleName,
+        imageFormat,
+        version,
+        transparent,
+        enabledByDefault,
+        ServiceType.WMS,
+        "",
+        Map.of());
+  }
 
   public GeometryInspectorBackgroundMapConfig {
+    serviceType = serviceType == null ? ServiceType.WMS : serviceType;
+    tileMatrixSet = normalize(tileMatrixSet);
+    dimensions = dimensions == null ? Map.of() : Map.copyOf(dimensions);
     serviceUrl = normalize(serviceUrl);
     layerNames = normalize(layerNames);
     styleName = normalize(styleName);
@@ -26,13 +59,17 @@ public record GeometryInspectorBackgroundMapConfig(
   }
 
   public boolean isValid() {
-    return !serviceUrl.isBlank() && !parsedLayerNames().isEmpty();
+    return !serviceUrl.isBlank()
+        && !parsedLayerNames().isEmpty()
+        && (serviceType != ServiceType.WMTS || parsedLayerNames().size() == 1);
   }
 
   public List<String> parsedLayerNames() {
     if (layerNames.isBlank()) {
       return List.of();
     }
+
+    if (serviceType == ServiceType.WMTS) return List.of(layerNames);
 
     return Arrays.stream(layerNames.split("[;,]"))
         .map(String::trim)

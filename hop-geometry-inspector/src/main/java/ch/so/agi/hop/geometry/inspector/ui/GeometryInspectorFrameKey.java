@@ -19,7 +19,10 @@ record GeometryInspectorFrameKey(
     String imageFormat,
     String version,
     boolean transparent,
-    boolean enabled) {
+    boolean enabled,
+    GeometryInspectorBackgroundMapConfig.ServiceType serviceType,
+    String tileMatrixSet,
+    java.util.Map<String, String> dimensions) {
 
   private static final double ROUNDING_SCALE = 1_000_000.0d;
 
@@ -32,7 +35,8 @@ record GeometryInspectorFrameKey(
       int outputDpi,
       Integer srid,
       boolean enabled) {
-    ReferencedEnvelope normalized = displayArea == null ? null : new ReferencedEnvelope(displayArea);
+    ReferencedEnvelope normalized =
+        displayArea == null ? null : new ReferencedEnvelope(displayArea);
     return new GeometryInspectorFrameKey(
         round(normalized == null ? 0.0d : normalized.getMinX()),
         round(normalized == null ? 0.0d : normalized.getMaxX()),
@@ -49,7 +53,12 @@ record GeometryInspectorFrameKey(
         config == null ? "" : config.imageFormat(),
         config == null ? "" : config.version(),
         config != null && config.transparent(),
-        enabled);
+        enabled,
+        config == null
+            ? GeometryInspectorBackgroundMapConfig.ServiceType.WMS
+            : config.serviceType(),
+        config == null ? "" : config.tileMatrixSet(),
+        config == null ? java.util.Map.of() : config.dimensions());
   }
 
   private static long round(double value) {

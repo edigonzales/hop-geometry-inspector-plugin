@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Capabilities xmlns="http://www.opengis.net/wmts/1.0" xmlns:ows="http://www.opengis.net/ows/1.1"
+  xmlns:xlink="http://www.w3.org/1999/xlink" version="1.0.0">
+  <ows:ServiceIdentification><ows:Title>Fixture</ows:Title><ows:ServiceType>OGC WMTS</ows:ServiceType><ows:ServiceTypeVersion>1.0.0</ows:ServiceTypeVersion></ows:ServiceIdentification>
+  <ows:OperationsMetadata><ows:Operation name="GetTile"><ows:DCP><ows:HTTP><ows:Get xlink:href="%s/tiles?token=abc">
+  <ows:Constraint name="GetEncoding"><ows:AllowedValues><ows:Value>KVP</ows:Value></ows:AllowedValues></ows:Constraint>
+  </ows:Get></ows:HTTP></ows:DCP></ows:Operation></ows:OperationsMetadata>
+  <Contents><Layer><ows:Title>Base</ows:Title><ows:WGS84BoundingBox><ows:LowerCorner>-180 -85</ows:LowerCorner><ows:UpperCorner>180 85</ows:UpperCorner></ows:WGS84BoundingBox>
+  <ows:Identifier>base</ows:Identifier><Style isDefault="true"><ows:Identifier>default</ows:Identifier></Style><Format>image/png</Format>
+  <Dimension><ows:Identifier>Time</ows:Identifier><Default>current</Default><Value>current</Value></Dimension>
+  <TileMatrixSetLink><TileMatrixSet>native-grid</TileMatrixSet></TileMatrixSetLink>%s</Layer>
+  <TileMatrixSet><ows:Identifier>native-grid</ows:Identifier><ows:SupportedCRS>urn:ogc:def:crs:EPSG::3857</ows:SupportedCRS>
+  <TileMatrix><ows:Identifier>overview</ows:Identifier><ScaleDenominator>7142.857142857143</ScaleDenominator><TopLeftCorner>0 512</TopLeftCorner><TileWidth>256</TileWidth><TileHeight>256</TileHeight><MatrixWidth>1</MatrixWidth><MatrixHeight>1</MatrixHeight></TileMatrix>
+  <TileMatrix><ows:Identifier>fine:1</ows:Identifier><ScaleDenominator>3571.4285714285716</ScaleDenominator><TopLeftCorner>0 512</TopLeftCorner><TileWidth>256</TileWidth><TileHeight>256</TileHeight><MatrixWidth>2</MatrixWidth><MatrixHeight>2</MatrixHeight></TileMatrix>
+  </TileMatrixSet></Contents></Capabilities>
