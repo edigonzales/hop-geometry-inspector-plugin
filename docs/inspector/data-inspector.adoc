@@ -1,0 +1,197 @@
+[[data-inspector]]
+= Data Inspector
+:description: Inspect transform rows, compare geometry layers and reuse captured data in Apache Hop Desktop.
+
+== Description
+
+Right-click a transform and choose *Inspect data...*. The inspector runs a separate local pipeline
+clone. It retains the required upstream transforms and substitutes sinks for downstream transforms
+outside the inspected section. The original editor pipeline is not changed.
+
+The plugin is installed under `plugins/misc/hop-geometry-inspector`. Install the Geometry Type
+plugin separately. Both plugins share the Geometry runtime; do not copy JTS into the Inspector folder.
+Apache Hop 2.19.0 and Java 21 are required; Java 25 is included in compatibility tests.
+
+== Input
+
+Every captured Hop row is inspectable, including rows without geometry, null geometry, empty geometry
+and malformed geometry. Geometry detection accepts native Geometry values and geometry-compatible
+WKT/EWKT or WKB fields. Parsing failures do not remove the original row from the table.
+
+== Options
+
+[.gui-mockup]
+----
++-----------------------------------------------------------------------+
+| Inspect data                                                          |
+| Sample size  [ 1000 / ALL ]    Mode [ FIRST / LAST / RANDOM ]           |
+| Timeout      [ seconds ]      Geometry field [ optional              ] |
+| Background   [ swisstopo Landeskarten (grau) ]                          |
+|                                                     [ Start ] [Cancel]|
++-----------------------------------------------------------------------+
+| Choose streams to capture                                             |
+| [x] Source [0] OUTPUT MAIN                                             |
+| [ ] Filter [0] OUTPUT TARGET -> Passed                                 |
+| [ ] Filter [0] OUTPUT TARGET -> Rejected                               |
+| [ ] Target [0] INPUT MAIN -> Source                                    |
+|                                           [Capture selected streams]  |
++-----------------------------------------------------------------------+
+----
+
+The stream chooser is authoritative. Select more than one stream to capture several results in a
+single execution. Each stream has its own metadata and row count. MAIN captures regular `putRow`
+output; TARGET captures explicitly routed `putRowTo` output. ERROR captures the configured error
+output, including error fields. INPUT identifies the incoming peer. Unused outputs can be empty.
+Optional ports are not activated by inspection.
+
+FIRST keeps the first N rows, LAST the last N, and RANDOM uses reservoir sampling. FIRST stops when
+all selected streams have reached N, the pipeline ends, the timeout expires or capture is cancelled.
+LAST and RANDOM run until completion, cancellation or timeout. The default is 1,000 rows.
+ALL records a full disk cache instead of retaining an unlimited list in the heap.
+
+A completed sample is not a complete stream. Samples are never accepted as replay inputs.
+
+== Output
+
+Each captured stream becomes a result layer with its own table. Rows remain read-only.
+The layer label identifies transform, stream, capture timestamp, sample/cache mode and completion.
+Further inspections in the same pipeline editor add layers to the existing workspace.
+
+[.gui-mockup]
+----
++----------------------+----------------------------+-------------------+
+| Results              | Map                        | Selected row      |
+| [x] Source           |                            | Attributes        |
+| [x] Processed        | geometry overlays          | Geometry type     |
+| Colour / Opacity     | swisstopo background       | SRID / WKT        |
+| Up / Down / Remove   |----------------------------| Validity / status |
+| Replace when adding  | Search [      ] [Filter]   |                   |
+|                      | Rows: id | name | geometry |                   |
++----------------------+----------------------------+-------------------+
+----
+
+=== Table, filters and details
+
+All attributes are displayed. Copy selected rows using the platform copy shortcut or context menu.
+Click a column to sort; Shift-click adds another sort key. Numbers, dates and booleans use typed
+comparison; nulls remain last. Capture ordinal is the stable final ordering key.
+
+Full-text search and the filter dialog operate on captured data. Filter clauses are combined with
+AND. Supported operators are equality, inequality, numeric/date comparisons, text contains and
+null/not-null. Filtering updates the active layer and its table. Disk-cache queries run in the
+background, with temporary disk indices and external sorting.
+
+Selecting a mapped row highlights its geometry. Selecting a geometry identifies its layer and row.
+Rows without renderable geometry still show their attributes. Details include SRID, geometry type,
+geometry text and an asynchronously computed validity or parse diagnostic.
+
+The map is limited to the first 50,000 matching non-empty geometries; the table and query
+cover the entire captured stream. A message identifies this limit. Selected geometries outside this window are loaded individually. The current SWT table adapter
+supports up to 2,147,483,647 rows per stream.
+
+=== Layers and coordinate systems
+
+Toggle layers, change colour/opacity, reorder them, choose their geometry field or remove them.
+The first visible layer with a known common CRS determines the map CRS. Incompatible layers remain
+available in the table and are labelled accordingly. Coordinates are not reprojected.
+A single result with no known CRS can be viewed in its original coordinates without a background.
+
+=== Background maps
+
+With no saved configuration the default is the swisstopo grayscale pixel map
+`ch.swisstopo.pixelkarte-grau`, served as JPEG WMTS tiles. EPSG:2056, 21781, 3857 and 4326 use their
+respective capabilities endpoint, for example
+https://wmts.geo.admin.ch/EPSG/2056/1.0.0/WMTSCapabilities.xml[LV95 capabilities].
+Tile matrix, style, REST template and time default come from the service.
+
+Existing WMS/WMTS configurations and disabled backgrounds are retained. Without an unambiguous
+supported CRS, no default background request is made. Network errors leave data inspection usable.
+WMS remains supported; legacy settings without a service type retain WMS semantics.
+
+WMTS downloads use at most four workers, five-second connection and ten-second read timeouts.
+Each viewer caches up to 64 MiB of decoded tiles in memory. There is no offline tile cache.
+Toggle the background off and on to retry/reload capabilities. HiDPI uses physical viewport pixels.
+
+== Caches
+
+Open *Data Inspector caches / replay...* from a transform context menu. Select caches to open or
+delete. An open cache is protected from automatic or manual deletion. Caches survive Hop restarts;
+interrupted recordings remain incomplete and cannot be replayed.
+
+Defaults: `${user.home}/.hop/data-inspector/cache`, 10 GiB overall and seven days since last access.
+Override through JVM properties `geometryInspector.cache.path`, `geometryInspector.cache.bytes`
+and `geometryInspector.cache.days`. Oldest unused caches are removed first. If protected data fills
+the budget, capture fails instead of marking truncated data complete.
+
+Rows use Hop's typed binary serialization, including Geometry Type values. The cache is not a
+portable exchange format. Unsupported value types and schema changes fail that recording.
+The manifest stores provenance, schema version, generation, row count, completion and a fingerprint;
+credentials are not written into the manifest. Captured data can itself contain sensitive fields.
+
+Completeness and configuration freshness are distinct. Only successful full recordings can be used
+for replay, and their upstream fingerprint must still match. Downstream-only edits do not invalidate
+upstream data. External databases/files are not polled for freshness: check the timestamp and capture
+again when source contents may have changed.
+
+== Replay
+
+Choose caches and *Run TO*, *Run FROM* or *Run BETWEEN*. The context transform is the starting
+selection; choose the second endpoint for BETWEEN. The execution dialog lists caches and every
+transform to execute, including writers. Confirming execution runs that section with its normal
+side effects.
+
+* TO executes the required predecessors and selected transform, stopping after it. Valid cached
+  boundaries replace predecessors where possible.
+* FROM executes the selected transform and descendants. Every external input boundary needs a
+  complete matching cache.
+* BETWEEN executes both endpoints and connecting paths. Side inputs also need matching caches.
+
+Multiple inputs must originate from the same capture generation. There is no silent fallback to a
+fresh full execution when required caches are absent, incomplete, incompatible or stale.
+
+The first implementation accepts a conservative set of standard row-stream transforms. Unsupported
+plugins are rejected before engine initialization. It excludes cycles, partitioning, multiple copies,
+non-normal pipeline modes and nested execution. Cache boundaries currently require logical MAIN
+output; directed/error caches are inspectable but are not accepted as replay sources.
+
+== Supported engines
+
+Apache Hop Desktop with the local, normal pipeline engine. This is a GUI plugin, not a transform to
+insert into a pipeline. Hop Web and remote/distributed engines are not supported.
+
+== Examples
+
+Download the pipelines with their adjacent README and data files:
+
+* link:../../examples/rows/inspect-rows.hpl[Rows without geometry]
+* link:../../examples/geometry/inspect-geometry.hpl[Geometry and malformed input]
+* link:../../examples/layers/compare-layers.hpl[Compare results]
+* link:../../examples/streams/inspect-streams.hpl[Directed streams]
+* link:../../examples/replay/replay-cache.hpl[Cache and replay]
+* link:../../examples/replay-join/replay-join.hpl[Two-input join replay]
+* link:../../examples/replay-branch/replay-branch.hpl[Branch replay]
+
+See link:../../examples/README.md[example instructions]. Automated fixtures in `e2e/` are separate
+from these user-facing instructions.
+
+link:../../examples/errors/inspect-errors.hpl[Download configured error-stream example].
+
+== Error handling
+
+Capture status distinguishes natural completion, sample limit, timeout, cancellation and pipeline
+failure. Full caches require natural, error-free completion. Parse failures remain visible as rows.
+Malformed cache files fail with a row/schema diagnostic; they are never silently repaired into a
+replayable result. Cache/replay validation errors appear before execution where possible.
+
+== Limitations
+
+No reprojection, geometry editing, raster, point clouds, 3D, automatic capture of normal runs or
+external-source freshness detection. Replay does not restore arbitrary transform state or external
+side effects. A sample cannot reveal errors outside the captured rows.
+
+== Troubleshooting
+
+After updating plugin JARs, restart Hop. The development sync script replaces the plugin directory
+to avoid stale classes. Keep Geometry Type installed alongside Inspector, with its shared runtime.
+Use the Hop log for pipeline/capture failures and the viewer status for background-map diagnostics.
+Check a known LV95 feature against swisstopo, then pan/zoom/resize and repeat on a HiDPI display.

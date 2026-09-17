@@ -16,7 +16,12 @@ public record SamplingResult(
     String sideResolutionMessage) {
 
   public SamplingResult {
-    rows = rows == null ? List.of() : Collections.unmodifiableList(new ArrayList<>(rows));
+    rows =
+        rows == null
+            ? List.of()
+            : rows instanceof ch.so.agi.hop.geometry.inspector.data.StoreRowList
+                ? rows
+                : Collections.unmodifiableList(new ArrayList<>(rows));
     reason = reason == null ? "" : reason;
     requestedSide = requestedSide == null ? GeometryInspectionSide.AUTO : requestedSide;
     sideResolutionMessage = sideResolutionMessage == null ? "" : sideResolutionMessage;

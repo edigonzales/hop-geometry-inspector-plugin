@@ -1,0 +1,13 @@
+= Hop Data Inspector
+:lang: en
+:imagesdir: images
+:example-caption!:
+:source-highlighter: prism
+:note-caption: Note
+:tip-caption: Tip
+:warning-caption: Warning
+:revdate: {localdate}
+:author: Stefan Ziegler
+
+include::inspector/data-inspector.adoc[leveloffset=+1]
+include::development/architecture.adoc[leveloffset=+1]

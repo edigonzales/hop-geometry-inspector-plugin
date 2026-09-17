@@ -66,6 +66,136 @@ class LocalGeometryPipelineSamplerExecutorTest {
     assertThat(result.rows()).extracting(row -> row[0]).containsExactly("POINT (1 1)");
   }
 
+  @Test
+  void captureServiceKeepsDirectedStreamsSeparate() throws Exception {
+    var pipeline = createPipeline();
+    var streams =
+        List.of(
+            new ch.so.agi.hop.geometry.inspector.data.StreamDescriptor(
+                "Target",
+                ch.so.agi.hop.geometry.inspector.data.StreamDescriptor.Direction.OUTPUT,
+                "MainSink",
+                ch.so.agi.hop.geometry.inspector.data.StreamDescriptor.Kind.TARGET,
+                0),
+            new ch.so.agi.hop.geometry.inspector.data.StreamDescriptor(
+                "Target",
+                ch.so.agi.hop.geometry.inspector.data.StreamDescriptor.Direction.OUTPUT,
+                "RejectSink",
+                ch.so.agi.hop.geometry.inspector.data.StreamDescriptor.Kind.TARGET,
+                0));
+    var results =
+        new ch.so.agi.hop.geometry.inspector.data.CaptureService()
+            .execute(
+                pipeline,
+                pipeline,
+                new Variables(),
+                new MemoryMetadataProvider(),
+                streams,
+                new GeometryInspectorOptions(
+                    100,
+                    SamplingMode.FIRST,
+                    GeometryInspectionSide.OUTPUT,
+                    "",
+                    Duration.ofSeconds(5)),
+                null,
+                () -> false);
+    assertThat(results).hasSize(2);
+    assertThat(results.get(0).rows().row(0)).containsExactly("POINT (1 1)");
+    assertThat(results.get(1).rows().row(0)).containsExactly("POINT (2 2)");
+    assertThat(results.get(0).generation()).isEqualTo(results.get(1).generation());
+  }
+
+  @Test
+  void timeoutAndCancellationApplyToEverySamplingMode() throws Exception {
+    for (var mode : SamplingMode.values()) {
+      var pipeline = new PipelineMeta();
+      pipeline.addTransform(new TransformMeta("Slow", new SlowSourceMeta()));
+      pipeline.addTransform(new TransformMeta("Dummy", "Empty", new DummyMeta()));
+      var streams =
+          List.of(
+              new ch.so.agi.hop.geometry.inspector.data.StreamDescriptor(
+                  "Slow",
+                  ch.so.agi.hop.geometry.inspector.data.StreamDescriptor.Direction.OUTPUT,
+                  "",
+                  ch.so.agi.hop.geometry.inspector.data.StreamDescriptor.Kind.MAIN,
+                  0),
+              new ch.so.agi.hop.geometry.inspector.data.StreamDescriptor(
+                  "Empty",
+                  ch.so.agi.hop.geometry.inspector.data.StreamDescriptor.Direction.OUTPUT,
+                  "",
+                  ch.so.agi.hop.geometry.inspector.data.StreamDescriptor.Kind.MAIN,
+                  0));
+      var service = new ch.so.agi.hop.geometry.inspector.data.CaptureService();
+      var results =
+          service.execute(
+              pipeline,
+              pipeline,
+              new Variables(),
+              new MemoryMetadataProvider(),
+              streams,
+              new GeometryInspectorOptions(
+                  3, mode, GeometryInspectionSide.OUTPUT, "", Duration.ofMillis(80)),
+              null,
+              () -> false);
+      assertThat(results.getFirst().completion())
+          .isEqualTo(ch.so.agi.hop.geometry.inspector.data.InspectionResult.Completion.PARTIAL);
+      assertThat(results.getFirst().reason()).contains("Timeout");
+      assertThat(results.getFirst().rows().size()).isLessThanOrEqualTo(3);
+      assertThat(results.getLast().rows().size()).isZero();
+      var cancelled =
+          service.execute(
+              pipeline,
+              pipeline,
+              new Variables(),
+              new MemoryMetadataProvider(),
+              streams,
+              new GeometryInspectorOptions(
+                  3, mode, GeometryInspectionSide.OUTPUT, "", Duration.ofSeconds(5)),
+              null,
+              () -> true);
+      assertThat(cancelled.getFirst().reason()).contains("Cancelled");
+    }
+  }
+
+  public static class SlowSourceMeta
+      extends BaseTransformMeta<SlowSourceTransform, TestTransformData> {
+    @Override
+    public ITransformIOMeta getTransformIOMeta() {
+      return new TransformIOMeta(false, true, false, false, false, false);
+    }
+  }
+
+  public static class SlowSourceTransform extends BaseTransform<SlowSourceMeta, TestTransformData> {
+    public SlowSourceTransform(
+        TransformMeta transform,
+        SlowSourceMeta meta,
+        TestTransformData data,
+        int copy,
+        PipelineMeta pipeline,
+        Pipeline engine) {
+      super(transform, meta, data, copy, pipeline, engine);
+    }
+
+    @Override
+    public boolean processRow() throws HopException {
+      if (isStopped()) {
+        setOutputDone();
+        return false;
+      }
+      try {
+        Thread.sleep(5);
+      } catch (InterruptedException interrupted) {
+        Thread.currentThread().interrupt();
+        setOutputDone();
+        return false;
+      }
+      var meta = new RowMeta();
+      meta.addValueMeta(new ValueMetaString("value"));
+      putRow(meta, new Object[] {"row"});
+      return true;
+    }
+  }
+
   private SamplingResult sample(GeometryInspectionSide side) throws Exception {
     Variables variables = new Variables();
     return new LocalGeometryPipelineSamplerExecutor()
@@ -97,7 +227,8 @@ class LocalGeometryPipelineSamplerExecutorTest {
     return pipelineMeta;
   }
 
-  public static class TestSourceMeta extends BaseTransformMeta<TestSourceTransform, TestTransformData> {
+  public static class TestSourceMeta
+      extends BaseTransformMeta<TestSourceTransform, TestTransformData> {
 
     @Override
     public ITransformIOMeta getTransformIOMeta() {
@@ -110,7 +241,8 @@ class LocalGeometryPipelineSamplerExecutorTest {
     }
   }
 
-  public static class RoutedTargetMeta extends BaseTransformMeta<RoutedTargetTransform, TestTransformData> {
+  public static class RoutedTargetMeta
+      extends BaseTransformMeta<RoutedTargetTransform, TestTransformData> {
 
     private String rejectTransformName;
 
@@ -196,9 +328,7 @@ class LocalGeometryPipelineSamplerExecutorTest {
                 .filter(rowSet -> !meta.isRejectRowSet(rowSet))
                 .collect(Collectors.toList());
         data.rejectOutputRowSets =
-            getOutputRowSets().stream()
-                .filter(meta::isRejectRowSet)
-                .collect(Collectors.toList());
+            getOutputRowSets().stream().filter(meta::isRejectRowSet).collect(Collectors.toList());
         data.initialized = true;
       }
 
@@ -207,7 +337,9 @@ class LocalGeometryPipelineSamplerExecutorTest {
       for (int index = 0; index < data.mainOutputRowSets.size(); index++) {
         putRowTo(
             data.outputRowMeta,
-            index < data.mainOutputRowSets.size() - 1 ? data.outputRowMeta.cloneRow(mainRow) : mainRow,
+            index < data.mainOutputRowSets.size() - 1
+                ? data.outputRowMeta.cloneRow(mainRow)
+                : mainRow,
             data.mainOutputRowSets.get(index));
       }
 
@@ -216,7 +348,9 @@ class LocalGeometryPipelineSamplerExecutorTest {
       for (int index = 0; index < data.rejectOutputRowSets.size(); index++) {
         putRowTo(
             data.outputRowMeta,
-            index < data.rejectOutputRowSets.size() - 1 ? data.outputRowMeta.cloneRow(rejectRow) : rejectRow,
+            index < data.rejectOutputRowSets.size() - 1
+                ? data.outputRowMeta.cloneRow(rejectRow)
+                : rejectRow,
             data.rejectOutputRowSets.get(index));
       }
 

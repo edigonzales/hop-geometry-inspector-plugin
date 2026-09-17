@@ -1,326 +1,69 @@
 # hop-geometry-inspector-plugin
 
-Apache Hop 2.19 Desktop GUI plugin for visual geometry inspection (`Inspect geometries...`) on transform outputs.
+**Data Inspector** for Apache Hop 2.19 Desktop. Right-click a transform and choose
+**Inspect data...** to inspect an isolated pipeline run.
 
-## Implemented scope
+## Features
 
-- Hop Desktop GUI only (no Hop Web support)
-- Transform context action: `Inspect geometries...`
-- Auto-preview sampling on a pruned pipeline clone (upstream + selected transform)
-- Sampling modes:
-  - `FIRST`
-  - `LAST`
-  - `RANDOM`
-- Geometry parsing chain:
-  - JTS `Geometry`
-  - Geometry ValueMeta (`getGeometry(...)` via geometry type plugin)
-  - WKB (bytes/hex)
-  - WKT/EWKT
-- Viewer:
-  - separate SWT window with independently rendered geometry and background images
-  - zoom/pan/reset extent tools
-  - default styles for point/line/polygon families
-  - status line with sampled rows, parsed features, parse errors, partial/full
-- SWT fallback summary dialog if SWT/GeoTools initialization fails
+- Complete row tables, typed sorting, search, field filters and geometry details.
+- Multiple result layers with linked map/table selection; no reprojection.
+- Explicit stream sampling (FIRST/LAST/RANDOM) and persistent binary caches.
+- Conservative cache replay with a preview of the transforms to execute.
+- SWT/GeoTools map with the swisstopo grey pixel map as its default WMTS background.
 
-## Modules
+See the [handbook](https://edigonzales.github.io/hop-geometry-inspector-plugin/data-inspector/main/),
+[handbook source](docs/inspector/data-inspector.adoc),
+[architecture](docs/development/architecture.adoc) and [examples](examples/README.md)
+for behavior, restrictions and troubleshooting.
 
-- `./hop-geometry-inspector`
-  - Main GUI plugin implementation (context action/filter, sampling, parsing, viewer, fallback).
-- `./assemblies/assemblies-hop-geometry-inspector`
-  - Install ZIP assembly under `plugins/misc/hop-geometry-inspector`.
+## Requirements and installation
 
-## Build
+Use Hop **2.19**, Java **21**, and the matching
+[Geometry Type plugin](https://github.com/edigonzales/hop-geometry-type-plugin).
+Extract both plugin ZIPs into your Hop installation and restart Hop Desktop.
+The Inspector remains installed at `plugins/misc/hop-geometry-inspector`.
+Plugin, Maven and settings IDs remain compatible with the Geometry Inspector.
+Hop Web and remote execution are not supported.
 
-Full build (tests + assembly):
+## Build and development
+
+Follow [AGENTS.md](AGENTS.md) to prepare the Geometry dependency and CI Maven settings.
+The shared parent is `ch.so.agi:hop-plugin-parent:0.1.0-SNAPSHOT`; GeoTools resolves
+from OSGeo. Snapshot dependencies resolve from `https://jars.interlis.guru/snapshots/`.
 
 ```bash
 mvn clean verify
-```
-
-Fast plugin build (skip tests):
-
-```bash
-mvn -pl hop-geometry-inspector -am -DskipTests package
-```
-
-Build prerequisites:
-
-- Java 21 compatible toolchain (`maven.compiler.release=21`)
-- Access to:
-  - Maven Central
-  - OSGeo GeoTools repository (`https://repo.osgeo.org/repository/release/`)
-  - the current `ch.so.agi:hop-geometry-type:0.2.0-SNAPSHOT` artifact from
-    `https://jars.interlis.guru/snapshots/`
-
-The CI compatibility matrix also runs the tests with Java 25 on Ubuntu, macOS and
-Windows. The canonical Ubuntu/Java 21 job is the only job that creates the
-publishable ZIP bundle.
-
-## Install in Hop
-
-### Option A: Manual ZIP install
-
-1. Build install ZIP:
-
-```bash
-mvn -pl assemblies/assemblies-hop-geometry-inspector -am package
-```
-
-2. Extract into your Hop home:
-
-```bash
-unzip -o ./assemblies/assemblies-hop-geometry-inspector/target/hop-geometry-inspector-plugin-0.1.0-SNAPSHOT.zip -d "$HOP_HOME"
-```
-
-3. Resulting plugin folder:
-
-- `$HOP_HOME/plugins/misc/hop-geometry-inspector`
-
-### Option B: Scripted build + sync into Hop home
-
-```bash
-./scripts/dev-sync-hop-plugin.sh "$HOP_HOME"
-```
-
-Or, if `HOP_HOME` is exported:
-
-```bash
-./scripts/dev-sync-hop-plugin.sh
-```
-
-## Shell scripts
-
-### `scripts/dev-sync-hop-plugin.sh`
-
-Builds plugin + assembly and syncs the ZIP directly into `HOP_HOME`.
-
-Behavior:
-
-- runs `mvn -q -DskipTests package`
-- removes target plugin folder before install to avoid stale files
-- unzips `hop-geometry-inspector-plugin-<version>.zip` into `HOP_HOME`
-
-## Fast development loop
-
-1. Keep a local Hop installation (`$HOP_HOME`).
-2. Sync latest plugin build:
-
-```bash
-./scripts/dev-sync-hop-plugin.sh "$HOP_HOME"
-```
-
-3. Restart Hop GUI to load updated plugin classes.
-
-Notes:
-
-- Java class reloading is limited; restart Hop after plugin class changes.
-- Re-syncing removes stale plugin files before unzip.
-
-## Tests
-
-Current automated coverage includes:
-
-- Unit tests:
-  - geometry field detection
-  - parser chain (JTS/WKT/EWKT/WKB)
-  - sampling collector behavior (first/last/random)
-  - feature building + parse statistics
-  - preview pipeline pruning
-- Integration-style tests (stubbed executor):
-  - sampler service orchestration
-  - pruning correctness before execution handoff
-
-Run tests:
-
-```bash
-mvn test
-```
-
-## CRS behavior
-
-The geometry inspector does not reproject geometries.
-
-- Parsed geometries are rendered with their original numeric coordinates.
-- The plugin inspects the sampled geometries for positive SRIDs (`geometry.getSRID() > 0`).
-- A usable CRS is only established when all renderable sampled geometries share exactly one positive SRID and GeoTools can decode it as `EPSG:<srid>`.
-- In that case, the sample feature type and sample extent are tagged with that decoded CRS.
-- If sampled geometries have no SRID, mixed SRIDs, or an SRID that cannot be decoded, the inspector still renders the geometry overlay, but it has no usable common CRS.
-
-Practical consequences:
-
-- Overlay rendering:
-  - Uses the coordinates of the displayed geometries as-is.
-  - No transformation between per-row SRIDs and a target map CRS is performed.
-  - Mixed CRS samples can therefore render in inconsistent positions relative to each other.
-- Selection details:
-  - If the selected geometry has its own positive SRID, the UI shows that as `EPSG:<srid>`.
-  - Otherwise the UI falls back to the detected sample CRS status or `No SRID`.
-- WMS background:
-  - The background map is only enabled when the sample has a consistent, decodable CRS.
-  - The WMS `GetMap` request then uses exactly that detected SRID as `EPSG:<srid>`.
-  - No separate reprojection step is performed before requesting the WMS.
-  - If the sample has no usable common CRS, the WMS background stays unavailable.
-
-In short:
-
-- The inspector does not always use the CRS of the currently displayed single geometry.
-- For the WMS, it uses the one common CRS detected for the whole sampled result set.
-- If there is no single consistent CRS across the sample, no WMS request is sent.
-
-## WMS and WMTS background maps
-
-The plugin uses **GeoTools 35.1**. In the background map settings, choose WMS or WMTS.
-Existing settings without a service type continue to load as WMS.
-
-For WMTS, enter the complete GetCapabilities document URL and click **Load layers**.
-Select one layer, style and PNG/JPEG format. **Automatic (match geometry CRS)** selects
-an advertised TileMatrixSet in the geometry CRS; you can also select a particular set.
-A mismatched CRS is reported without transforming geometries or reprojecting the raster.
-
-For example, with EPSG:2056 geometries use:
-`https://wmts.geo.admin.ch/EPSG/2056/1.0.0/WMTSCapabilities.xml`
-and select `ch.swisstopo.pixelkarte-farbe` or another suitable layer.
-
-REST ResourceURL templates are preferred; KVP GetTile is supported when no matching
-REST template exists. Time and other dimensions use the service defaults, displayed
-in the dialog and refreshed when the background is reinitialized. Only dimensions
-without defaults require an entered value. Cancel leaves saved settings unchanged.
-
-Free zoom and HiDPI displays are supported by choosing the next finer available tile
-resolution and scaling to the physical viewport pixels. Four downloads run at most
-concurrently, with five-second connect and ten-second read timeouts. Each viewer
-reuses up to 64 MiB of decoded tiles in memory; there is no offline cache.
-Missing tiles remain transparent and the status reports an incomplete background.
-Toggle the background off and on to retry and reload capabilities. The geometry
-overlay remains usable during loading and errors.
-
-For manual verification, compare known LV95 geometries with the reference background,
-then pan and zoom rapidly, resize the window and repeat at Retina/HiDPI scaling.
-Also verify the existing WMS configuration. Automated WMTS tests use local HTTP fixtures
-and do not depend on geo.admin.ch availability. The opt-in SWT dialog smoke test can be run
-on an interactive desktop with:
-
-```bash
-mvn -pl hop-geometry-inspector -am -Dtest=BackgroundMapDialogSmokeTest \
-  -DgeometryInspector.swtSmoke=true -Dsurefire.failIfNoSpecifiedTests=false test
-```
-
-## Sampling and source selection
-
-The inspector runs a preview on a pruned clone of the pipeline. All upstream transforms and the
-selected transform are kept; downstream transforms are not executed during sampling.
-
-| Option | What is sampled | Fallback behavior | Typical use |
-| --- | --- | --- | --- |
-| `Auto` | Main output rows of the selected transform. Routed or targeted main outputs are included. | If no output rows are observed, the inspector switches to input rows of the selected transform. It never mixes input and output rows in one sample. | Default choice when you want to inspect what the transform produces. |
-| `Output` | Main output rows only. Optional reject or QA target streams are not included. | No fallback. If the selected transform emits no main output rows, the inspector reports that `Output` produced no rows. | Inspect the rows that continue on the main downstream path. |
-| `Input` | Rows read by the selected transform from upstream hops. | No fallback. If the selected transform reads no rows, the inspector reports that `Input` produced no rows. | Inspect incoming geometry before the transform changes or validates it. |
-
-Notes:
-
-- `Geometry source = Output` always means the transform's main output. Reject or QA target row sets
-  are not part of the inspected sample.
-- `Geometry source = Auto` prefers output rows whenever output rows are present at runtime.
-- The `Geometry field` list follows the selected source:
-  - `Auto` shows output-side candidates when output metadata exposes geometry-compatible fields;
-    otherwise it shows input-side candidates.
-  - `Output` and `Input` restrict the field list to their respective side.
-- If the chosen geometry field is not available on the effective side at runtime, the inspector
-  auto-adjusts to a detected geometry field on that side when possible and reports that change in
-  the status line or fallback summary.
-
-## Sampling modes and completion
-
-| Mode | When preview stops | Which rows are kept | Timeout relevance |
-| --- | --- | --- | --- |
-| `FIRST` | As soon as `N` rows have been captured on the effective side, or when the preview finishes naturally before that. | The first `N` rows seen on the effective side. | Timeout only matters if the preview has not produced `N` rows yet. |
-| `LAST` | When the preview finishes naturally or when the timeout is reached. | The last `N` rows seen on the effective side. | Timeout can cut the sample short and mark it partial. |
-| `RANDOM` | When the preview finishes naturally or when the timeout is reached. | A reservoir sample of up to `N` rows from the effective side. | Timeout can cut the sample short and mark it partial. |
-
-`Sample size` accepts numeric values and `ALL`. With `ALL`, the inspector keeps every sampled row on
-the effective side (no size cap). For `FIRST + ALL`, sampling runs until the preview finishes
-naturally.
-
-Completion and fallback behavior:
-
-- The viewer status line and the SWT fallback summary report the sample as `full` or `partial`.
-- A timeout always marks the sample as `partial`. Error cases can also yield a partial sample on
-  non-`FIRST` collection paths.
-- Parse errors and null or empty geometries are counted and shown in the viewer status line or
-  fallback summary. They do not prevent the map from opening as long as at least one renderable
-  geometry remains.
-- The inspector shows the fallback summary instead of the map when:
-  - no sampled rows were observed on the effective side
-  - no geometry field candidates exist on the inspected side
-  - the selected geometry field yields no renderable geometries after parsing
-  - the SWT or GeoTools viewer cannot be initialized
-
-## Troubleshooting
-
-### Viewer does not open
-
-The plugin falls back to an SWT summary/error dialog instead of failing hard.
-
-### Stale plugin jars/classes in Hop home
-
-Re-run sync script; it removes `$HOP_HOME/plugins/misc/hop-geometry-inspector` before reinstall.
-
-### `Hop configuration file not found, not serializing ...` during tests
-
-This message can appear in test runs and is expected in a plain Maven test environment.
-
-## Recommended Hop GUI run configuration
-
-- Main class: `org.apache.hop.ui.hopgui.HopGui`
-- VM options (example): `-Dfile.encoding=UTF-8`
-
-## Smoke tests
-
-1. Pipeline editor:
-   - Use/produce a geometry-compatible output field (JTS/WKT/WKB).
-   - Open transform popup, confirm `Inspect geometries...` is visible.
-2. Inspector options:
-   - Select geometry field and sampling mode (`FIRST`, `LAST`, `RANDOM`).
-   - Start with sample sizes like `50`, `200`, `1000`, or `ALL`.
-3. Viewer behavior:
-   - Verify zoom/pan/reset extent.
-   - Verify status metrics (rows/features/errors, partial/full).
-4. Robustness:
-   - Verify multiple geometry fields can be switched in viewer.
-   - Verify fallback dialog appears if SWT viewer cannot initialize.
-
-## Maven artifact and CI
-
-The installable ZIP is published as a normal Maven snapshot artifact:
-
-- `ch.so.agi:hop-geometry-inspector-plugin:0.1.0-SNAPSHOT` (`zip`)
-
-Consumers use the base `0.1.0-SNAPSHOT` version. Maven resolves the current
-snapshot through repository metadata; timestamped snapshot filenames are not
-part of this repository's configuration. The snapshot repository is:
-`https://jars.interlis.guru/snapshots/`.
-
-The CI workflow uses the shared `hop-plugin-ci` contract:
-
-- Ubuntu, macOS and Windows with Java 21 and 25
-- Ubuntu/Java 21: `mvn -U -B -ntp clean verify` and package validation
-- other matrix cells: `mvn -U -B -ntp clean test`
-- Linux SWT tests run under Xvfb; macOS tests use `-XstartOnFirstThread`
-- the canonical run uses the current Geometry Type `0.2.0-SNAPSHOT`; JTS is
-  supplied by the shared Geometry Type runtime rather than duplicated in this ZIP
-- an installed-plugin classloader test verifies that Geometry Type and Inspector
-  share the runtime classes from a clean temporary plugin tree
-- Pull requests never publish Maven artifacts
-- pushes and manual runs on `main` publish the already verified ZIP without rebuilding
-- the published ZIP is resolved again from an empty Maven cache and compared byte-for-byte
-
-Run the local package validation with:
-
-```bash
-mvn -U -B -ntp clean verify
 python3 scripts/verify-package.py
+python3 scripts/check-docs.py
+python3 scripts/build-docs-site.py
 ```
 
-The Maven publication uses the protected secrets `INTERLIS_MAVEN_USERNAME` and
-`INTERLIS_MAVEN_TOKEN`. Plugin GitHub Releases are not used.
+For a disposable development Hop installation, `scripts/dev-sync-hop-plugin.sh "$HOP_HOME"`
+builds and replaces the installed Inspector folder. Restart Hop after syncing.
+That convenience script skips tests; it does not replace verification.
+
+## Artifacts and modules
+
+- `hop-geometry-inspector`: GUI, capture, row stores and replay.
+- `assemblies/assemblies-hop-geometry-inspector`: install ZIP under `target/`.
+- `integration-tests`: tests against installed, canonical plugin ZIPs.
+- `examples`: directly openable user pipelines; `e2e`: automated expectations.
+
+Geometry Type and JTS are supplied by the shared Geometry runtime classloader,
+not duplicated in the Inspector ZIP.
+
+## CI and publication
+
+The [shared CI contract](https://github.com/edigonzales/hop-plugin-ci/blob/main/docs/ci-contract.md)
+verifies Java 21/25 compatibility on Linux, macOS and Windows. Ubuntu/Java 21 creates
+the canonical ZIP. Package and installed-classloader checks gate snapshot publication;
+publication never rebuilds the candidate. Existing workflow references and `ci-ref`
+values are preserved. Pull requests do not publish artifacts.
+
+Documentation builds the exact checkout in a separate workflow. `main` deploys to
+GitHub Pages; the repository's Pages source must be set to **GitHub Actions**.
+Local documentation builds include uncommitted working files.
+
+## License
+
+See [LICENSE](LICENSE).

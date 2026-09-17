@@ -90,30 +90,25 @@ jobs:
           name: hop-geometry-type-dependency
           path: .ci/geometry-type
 
-      - name: Install plugins into temporary Hop tree
-        id: install
+      - name: Download isolated Hop 2.19 client
         shell: bash
         run: |
           set -euo pipefail
-          install_root="$RUNNER_TEMP/hop-installed-plugin-test"
-          rm -rf "$install_root"
-          mkdir -p "$install_root"
+          curl --fail --location --retry 3 --connect-timeout 20 --max-time 600 \
+            https://downloads.apache.org/hop/2.19.0/apache-hop-client-2.19.0.zip -o "$RUNNER_TEMP/hop.zip" || \
+          curl --fail --location --retry 3 --connect-timeout 20 --max-time 600 \
+            https://archive.apache.org/dist/hop/2.19.0/apache-hop-client-2.19.0.zip -o "$RUNNER_TEMP/hop.zip"
+          echo "eb227ffe3386480f5ecb59e1d9fdbb16ace15b9ebd9e02da16cdca2c3cadc869f92275b0f607952fb2c5122986839a5b09b2c5762401dad128d8de6b0394643c  $RUNNER_TEMP/hop.zip" | sha512sum --check
+          unzip -q "$RUNNER_TEMP/hop.zip" -d "$RUNNER_TEMP/isolated-hop"
+
+      - name: Verify canonical installed plugins and examples
+        shell: bash
+        run: |
+          set -euo pipefail
           inspector_zip="$(find .ci/inspector -type f -name '*.zip' -print -quit)"
           geometry_zip="$(find .ci/geometry-type -type f -name '*.zip' -print -quit)"
-          test -n "$inspector_zip"
-          test -n "$geometry_zip"
-          unzip -q "$geometry_zip" -d "$install_root"
-          unzip -q "$inspector_zip" -d "$install_root"
-          test -d "$install_root/plugins/misc/hop-geometry-type"
-          test -d "$install_root/plugins/misc/hop-geometry-inspector"
-          echo "plugins-dir=$install_root/plugins" >> "$GITHUB_OUTPUT"
-
-      - name: Run installed plugin classloader test
-        env:
-          PLUGINS_DIR: ${{ steps.install.outputs.plugins-dir }}
-        run: >-
-          mvn -U -B -ntp -pl integration-tests test
-          -Dgeometry.inspector.plugins.dir="$PLUGINS_DIR"
+          python3 scripts/run-e2e.py --hop-home "$RUNNER_TEMP/isolated-hop/hop" \
+            --plugin-zip "$inspector_zip" --geometry-zip "$geometry_zip"
 
   publish:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'

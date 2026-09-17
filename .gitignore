@@ -1,2 +1,78 @@
-**/target/
+# OS Files
 .DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Build artifacts
+target/
+*.jar
+*.war
+*.ear
+
+# Biblios
+docs/.downloads/
+docs/build/
+
+# Maven
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.project
+.classpath
+.settings/
+.vscode/
+
+# Eclipse
+bin/
+.metadata/
+
+# IntelliJ
+out/
+*.log
+
+# NetBeans
+nbproject/private/
+nbbuild/
+dist/
+nbdist/
+.nb-gradle/
+
+# VS Code
+.vscode/
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.bak
+*.temp
+
+# Plugin distribution
+*.zip
+*.tar.gz
+assemblies/output/
+
+.cache/
+
+# Inspector local recordings and documentation work files
+.hop/
+data-inspector/cache/
+docs/.biblios-cache/
+docs/biblios.local.yml
+__pycache__/
+.ci/

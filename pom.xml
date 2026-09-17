@@ -3,6 +3,12 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
+  <parent>
+    <groupId>ch.so.agi</groupId>
+    <artifactId>hop-plugin-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <relativePath/>
+  </parent>
   <groupId>ch.so.agi</groupId>
   <artifactId>hop-geometry-inspector-plugin-parent</artifactId>
   <version>0.1.0-SNAPSHOT</version>
@@ -18,20 +24,9 @@
   </modules>
 
   <properties>
-    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <maven.compiler.release>21</maven.compiler.release>
-    <hop.version>2.19.0</hop.version>
     <hop.geometry.type.version>0.2.0-SNAPSHOT</hop.geometry.type.version>
     <jts.version>1.20.0</jts.version>
     <geotools.version>35.1</geotools.version>
-    <junit.version>5.12.0</junit.version>
-    <assertj.version>3.27.3</assertj.version>
-    <jandex.plugin.version>3.2.7</jandex.plugin.version>
-    <ui.test.argLine></ui.test.argLine>
-    <maven.compiler.version>3.14.0</maven.compiler.version>
-    <maven.surefire.version>3.5.2</maven.surefire.version>
-    <maven.assembly.version>3.7.1</maven.assembly.version>
-    <maven.jar.version>3.4.2</maven.jar.version>
   </properties>
 
   <dependencyManagement>
@@ -42,26 +37,6 @@
         <version>${geotools.version}</version>
         <type>pom</type>
         <scope>import</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.hop</groupId>
-        <artifactId>hop-core</artifactId>
-        <version>${hop.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.hop</groupId>
-        <artifactId>hop-engine</artifactId>
-        <version>${hop.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.hop</groupId>
-        <artifactId>hop-ui</artifactId>
-        <version>${hop.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.junit.jupiter</groupId>
-        <artifactId>junit-jupiter</artifactId>
-        <version>${junit.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
@@ -85,59 +60,4 @@
     </repository>
   </repositories>
 
-  <build>
-    <pluginManagement>
-      <plugins>
-        <plugin>
-          <artifactId>maven-compiler-plugin</artifactId>
-          <version>${maven.compiler.version}</version>
-          <configuration>
-            <release>${maven.compiler.release}</release>
-          </configuration>
-        </plugin>
-        <plugin>
-          <artifactId>maven-surefire-plugin</artifactId>
-          <version>${maven.surefire.version}</version>
-          <configuration>
-            <argLine>${ui.test.argLine}</argLine>
-          </configuration>
-        </plugin>
-        <plugin>
-          <artifactId>maven-jar-plugin</artifactId>
-          <version>${maven.jar.version}</version>
-        </plugin>
-        <plugin>
-          <artifactId>maven-assembly-plugin</artifactId>
-          <version>${maven.assembly.version}</version>
-        </plugin>
-      </plugins>
-    </pluginManagement>
-  </build>
-
-  <profiles>
-    <profile>
-      <id>mac-arm64</id>
-      <activation>
-        <os>
-          <family>mac</family>
-          <arch>aarch64</arch>
-        </os>
-      </activation>
-      <properties>
-        <ui.test.argLine>-XstartOnFirstThread</ui.test.argLine>
-      </properties>
-    </profile>
-    <profile>
-      <id>mac-intel</id>
-      <activation>
-        <os>
-          <family>mac</family>
-          <arch>x86_64</arch>
-        </os>
-      </activation>
-      <properties>
-        <ui.test.argLine>-XstartOnFirstThread</ui.test.argLine>
-      </properties>
-    </profile>
-  </profiles>
 </project>

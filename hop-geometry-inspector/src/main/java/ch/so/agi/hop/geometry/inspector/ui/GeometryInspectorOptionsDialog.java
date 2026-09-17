@@ -1,10 +1,10 @@
 package ch.so.agi.hop.geometry.inspector.ui;
 
 import ch.so.agi.hop.geometry.inspector.GeometryInspectorSettingsService;
-import ch.so.agi.hop.geometry.inspector.model.GeometryInspectorBackgroundMapConfig;
 import ch.so.agi.hop.geometry.inspector.model.GeometryFieldCandidate;
-import ch.so.agi.hop.geometry.inspector.model.GeometryInspectorOptions;
 import ch.so.agi.hop.geometry.inspector.model.GeometryInspectionSide;
+import ch.so.agi.hop.geometry.inspector.model.GeometryInspectorBackgroundMapConfig;
+import ch.so.agi.hop.geometry.inspector.model.GeometryInspectorOptions;
 import ch.so.agi.hop.geometry.inspector.model.SamplingMode;
 import java.time.Duration;
 import java.util.List;
@@ -40,11 +40,11 @@ public class GeometryInspectorOptionsDialog {
 
   public GeometryInspectorOptions open() {
     Shell shell = new Shell(parent, SWT.DIALOG_TRIM | SWT.APPLICATION_MODAL | SWT.RESIZE);
-    shell.setText("Inspect geometries...");
+    shell.setText("Inspect data...");
     shell.setLayout(new GridLayout(2, false));
 
     Label inspectionSideLabel = new Label(shell, SWT.NONE);
-    inspectionSideLabel.setText("Geometry source");
+    inspectionSideLabel.setText("Initial stream selection");
 
     Combo inspectionSideCombo = new Combo(shell, SWT.DROP_DOWN | SWT.READ_ONLY);
     inspectionSideCombo.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
@@ -63,13 +63,17 @@ public class GeometryInspectorOptionsDialog {
     geometryFieldCombo.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
     updateGeometryFieldChoices(geometryFieldCombo, GeometryInspectionSide.AUTO, null);
 
+    new Label(shell, SWT.NONE).setText("Capture mode");
+    Combo captureMode = new Combo(shell, SWT.READ_ONLY);
+    captureMode.setItems("Sample", "Record complete disk cache");
+    captureMode.select(0);
     Label sampleSizeLabel = new Label(shell, SWT.NONE);
     sampleSizeLabel.setText("Sample size");
 
     Combo sampleSizeCombo = new Combo(shell, SWT.DROP_DOWN);
     sampleSizeCombo.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
     sampleSizeCombo.setItems(new String[] {"50", "200", "1000", SAMPLE_SIZE_ALL_LABEL});
-    sampleSizeCombo.setText("200");
+    sampleSizeCombo.setText("1000");
 
     Label samplingModeLabel = new Label(shell, SWT.NONE);
     samplingModeLabel.setText("Sampling mode");
@@ -77,9 +81,18 @@ public class GeometryInspectorOptionsDialog {
     Combo samplingModeCombo = new Combo(shell, SWT.DROP_DOWN | SWT.READ_ONLY);
     samplingModeCombo.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
     samplingModeCombo.setItems(
-        new String[] {SamplingMode.FIRST.name(), SamplingMode.LAST.name(), SamplingMode.RANDOM.name()});
+        new String[] {
+          SamplingMode.FIRST.name(), SamplingMode.LAST.name(), SamplingMode.RANDOM.name()
+        });
     samplingModeCombo.setText(SamplingMode.FIRST.name());
 
+    captureMode.addListener(
+        SWT.Selection,
+        event -> {
+          boolean sample = captureMode.getSelectionIndex() == 0;
+          sampleSizeCombo.setEnabled(sample);
+          samplingModeCombo.setEnabled(sample);
+        });
     Label timeoutLabel = new Label(shell, SWT.NONE);
     timeoutLabel.setText("Timeout (seconds)");
 
@@ -134,16 +147,15 @@ public class GeometryInspectorOptionsDialog {
         SWT.Selection,
         event -> {
           try {
-            int sampleSize = parseSampleSize(sampleSizeCombo.getText());
+            int sampleSize =
+                captureMode.getSelectionIndex() == 1
+                    ? Integer.MAX_VALUE
+                    : parseSampleSize(sampleSizeCombo.getText());
             int timeoutSeconds = Integer.parseInt(timeoutCombo.getText().trim());
             SamplingMode mode = SamplingMode.fromLabel(samplingModeCombo.getText());
             GeometryInspectionSide inspectionSide =
                 GeometryInspectionSide.fromLabel(inspectionSideCombo.getText());
             String geometryField = geometryFieldCombo.getText();
-
-            if (geometryField == null || geometryField.isBlank()) {
-              throw new IllegalArgumentException("No geometry field selected");
-            }
 
             result[0] =
                 new GeometryInspectorOptions(

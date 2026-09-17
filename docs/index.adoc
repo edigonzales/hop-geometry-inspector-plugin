@@ -1,0 +1,9 @@
+= Data Inspector Plugin
+:description: Inspect Apache Hop rows, geometry layers and cached pipeline results.
+
+The Data Inspector is a desktop GUI plugin for Apache Hop.
+
+* xref:inspector/data-inspector.adoc[Data Inspector]
+* xref:development/architecture.adoc[Architecture and testing]
+
+User pipelines live in `examples/`. Automated scenarios and expected data live in `e2e/`.

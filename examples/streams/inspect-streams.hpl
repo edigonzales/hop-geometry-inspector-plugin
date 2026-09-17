@@ -1,0 +1,129 @@
+<?xml version='1.0' encoding='utf-8'?>
+<pipeline>
+  <info>
+    <name>inspect-streams</name>
+    <pipeline_type>Normal</pipeline_type>
+    <parameters />
+  </info>
+  <transform>
+    <name>Source</name>
+    <type>DataGrid</type>
+    <copies>1</copies>
+    <distribute>N</distribute>
+    <GUI>
+      <xloc>100</xloc>
+      <yloc>150</yloc>
+    </GUI>
+    <fields>
+      <field>
+        <name>id</name>
+        <type>Integer</type>
+        <length>-1</length>
+        <precision>-1</precision>
+        <set_empty_string>N</set_empty_string>
+      </field>
+      <field>
+        <name>name</name>
+        <type>String</type>
+        <length>-1</length>
+        <precision>-1</precision>
+        <set_empty_string>N</set_empty_string>
+      </field>
+      <field>
+        <name>geometry</name>
+        <type>String</type>
+        <length>-1</length>
+        <precision>-1</precision>
+        <set_empty_string>N</set_empty_string>
+      </field>
+    </fields>
+    <data>
+      <line>
+        <item>1</item>
+        <item>first</item>
+        <item>SRID=2056;POINT (2600000 1200000)</item>
+      </line>
+      <line>
+        <item>2</item>
+        <item>broken</item>
+        <item>invalid WKT</item>
+      </line>
+      <line>
+        <item>3</item>
+        <item>null</item>
+        <item />
+      </line>
+      <line>
+        <item>4</item>
+        <item>empty</item>
+        <item>POINT EMPTY</item>
+      </line>
+    </data>
+  </transform>
+  <transform>
+    <name>Filter</name>
+    <type>FilterRows</type>
+    <copies>1</copies>
+    <distribute>N</distribute>
+    <GUI>
+      <xloc>300</xloc>
+      <yloc>150</yloc>
+    </GUI>
+    <send_true_to>Passed</send_true_to>
+    <send_false_to>Rejected</send_false_to>
+    <compare>
+      <condition>
+        <negated>N</negated>
+        <leftvalue>id</leftvalue>
+        <function>=</function>
+        <rightvalue />
+        <value>
+          <name>constant</name>
+          <type>Integer</type>
+          <text>1</text>
+          <isnull>N</isnull>
+        </value>
+      </condition>
+    </compare>
+  </transform>
+  <transform>
+    <name>Passed</name>
+    <type>Dummy</type>
+    <copies>1</copies>
+    <distribute>N</distribute>
+    <GUI>
+      <xloc>550</xloc>
+      <yloc>150</yloc>
+    </GUI>
+  </transform>
+  <transform>
+    <name>Rejected</name>
+    <type>Dummy</type>
+    <copies>1</copies>
+    <distribute>N</distribute>
+    <GUI>
+      <xloc>700</xloc>
+      <yloc>150</yloc>
+    </GUI>
+  </transform>
+  <order>
+    <hop>
+      <from>Source</from>
+      <to>Filter</to>
+      <enabled>Y</enabled>
+    </hop>
+    <hop>
+      <from>Filter</from>
+      <to>Passed</to>
+      <enabled>Y</enabled>
+    </hop>
+    <hop>
+      <from>Filter</from>
+      <to>Rejected</to>
+      <enabled>Y</enabled>
+    </hop>
+  </order>
+  <transform_error_handling />
+  <attributes />
+  <notepads />
+</pipeline>

@@ -19,9 +19,7 @@ public record GeometryInspectorOptions(
     if (inspectionSide == null) {
       throw new IllegalArgumentException("inspectionSide must not be null");
     }
-    if (geometryField == null || geometryField.isBlank()) {
-      throw new IllegalArgumentException("geometryField must not be blank");
-    }
+    geometryField = geometryField == null ? "" : geometryField;
     if (timeout == null || timeout.isNegative() || timeout.isZero()) {
       throw new IllegalArgumentException("timeout must be > 0");
     }

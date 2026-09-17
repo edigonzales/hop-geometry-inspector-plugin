@@ -192,7 +192,7 @@ public class GeometryInspectorBackgroundMapSettingsDialog {
               WmtsCatalog loaded = null;
               String error = null;
               try {
-                loaded = WmtsCatalog.load(address);
+                loaded = WmtsCatalog.load(address.replace("{srid}", "2056"));
               } catch (Exception failure) {
                 error = failure.getMessage() == null ? failure.toString() : failure.getMessage();
               }

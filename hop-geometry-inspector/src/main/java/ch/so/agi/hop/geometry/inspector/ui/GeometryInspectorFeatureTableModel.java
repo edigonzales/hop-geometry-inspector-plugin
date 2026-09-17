@@ -20,6 +20,7 @@ final class GeometryInspectorFeatureTableModel {
   static final int MAX_HIT_LABEL_LENGTH = 120;
   static final int MAX_CELL_VALUE_LENGTH = 180;
 
+  private ch.so.agi.hop.geometry.inspector.data.QueryIndex queryIndex;
   private final List<Column> columns;
   private final List<Entry> entries;
   private final Map<Integer, Integer> tableIndexByRowIndex;
@@ -30,7 +31,7 @@ final class GeometryInspectorFeatureTableModel {
       SamplingResult samplingResult, GeometryBuildResult buildResult, String geometryField) {
     IRowMeta rowMeta = samplingResult == null ? null : samplingResult.rowMeta();
     List<Column> nextColumns = List.copyOf(buildColumns(rowMeta));
-    List<Entry> nextEntries = List.copyOf(buildEntries(samplingResult, buildResult, rowMeta, geometryField));
+    List<Entry> nextEntries = buildEntries(samplingResult, buildResult, rowMeta, geometryField);
     this.columns = nextColumns;
     this.entries = nextEntries;
     this.tableIndexByRowIndex = buildIndex(nextEntries);
@@ -40,7 +41,7 @@ final class GeometryInspectorFeatureTableModel {
 
   private GeometryInspectorFeatureTableModel(List<Column> columns, List<Entry> entries) {
     List<Column> nextColumns = columns == null ? List.of() : List.copyOf(columns);
-    List<Entry> nextEntries = entries == null ? List.of() : List.copyOf(entries);
+    List<Entry> nextEntries = entries == null ? List.of() : entries;
     this.columns = nextColumns;
     this.entries = nextEntries;
     this.tableIndexByRowIndex = buildIndex(nextEntries);
@@ -55,7 +56,13 @@ final class GeometryInspectorFeatureTableModel {
     int normalizedColumnIndex = normalizeColumnIndex(columnIndex);
     Comparator<Entry> comparator = comparatorForColumn(normalizedColumnIndex);
     if (!ascending) {
-      comparator = comparator.reversed();
+      Comparator<Entry> original = comparator;
+      comparator =
+          (a, b) ->
+              a.rawValueAt(normalizedColumnIndex) == null
+                      || b.rawValueAt(normalizedColumnIndex) == null
+                  ? original.compare(a, b)
+                  : -original.compare(a, b);
     }
     comparator = comparator.thenComparingInt(Entry::rowIndex);
     List<Entry> sorted = new ArrayList<>(entries);
@@ -77,8 +84,8 @@ final class GeometryInspectorFeatureTableModel {
     if (columnIndex <= 0) {
       return Comparator.comparingInt(Entry::rowIndex);
     }
-    return Comparator.comparing(
-        entry -> entry.clipboardCellValueAt(columnIndex).toLowerCase(Locale.ROOT));
+    return (left, right) ->
+        compareValues(left.rawValueAt(columnIndex), right.rawValueAt(columnIndex));
   }
 
   int size() {
@@ -107,12 +114,22 @@ final class GeometryInspectorFeatureTableModel {
   }
 
   Entry entryForRow(int rowIndex) {
-    Integer tableIndex = tableIndexByRowIndex.get(rowIndex);
-    return tableIndex == null ? null : entries.get(tableIndex);
+    int tableIndex = indexOfRow(rowIndex);
+    return tableIndex < 0 ? null : entries.get(tableIndex);
   }
 
   int indexOfRow(int rowIndex) {
-    return tableIndexByRowIndex.getOrDefault(rowIndex, -1);
+    if (queryIndex != null)
+      try {
+        return Math.toIntExact(queryIndex.position(rowIndex));
+      } catch (java.io.IOException e) {
+        throw new java.io.UncheckedIOException(e);
+      }
+    if (!tableIndexByRowIndex.isEmpty()) return tableIndexByRowIndex.getOrDefault(rowIndex, -1);
+    if (rowIndex >= 0 && rowIndex < entries.size() && entries.get(rowIndex).rowIndex() == rowIndex)
+      return rowIndex;
+    for (int i = 0; i < entries.size(); i++) if (entries.get(i).rowIndex() == rowIndex) return i;
+    return -1;
   }
 
   int indexOfFeature(SimpleFeature feature) {
@@ -151,7 +168,7 @@ final class GeometryInspectorFeatureTableModel {
       GeometryBuildResult buildResult,
       IRowMeta rowMeta,
       String geometryField) {
-    if (samplingResult == null || buildResult == null || buildResult.features().isEmpty()) {
+    if (samplingResult == null) {
       return List.of();
     }
 
@@ -160,13 +177,39 @@ final class GeometryInspectorFeatureTableModel {
             ? -1
             : rowMeta.indexOfValue(geometryField);
 
-    List<Entry> nextEntries = new ArrayList<>(buildResult.features().size());
-    for (SimpleFeature feature : buildResult.features()) {
-      if (feature == null) {
-        continue;
-      }
-      int rowIndex = rowIndexOf(feature);
-      Geometry geometry = feature.getDefaultGeometry() instanceof Geometry current ? current : null;
+    Map<Integer, SimpleFeature> features = new LinkedHashMap<>();
+    if (buildResult != null)
+      for (SimpleFeature feature : buildResult.features())
+        features.put(rowIndexOf(feature), feature);
+    if (samplingResult.rows()
+        instanceof ch.so.agi.hop.geometry.inspector.data.StoreRowList stored) {
+      return new java.util.AbstractList<>() {
+        public int size() {
+          return stored.size();
+        }
+
+        public Entry get(int index) {
+          Object[] row = stored.get(index);
+          SimpleFeature feature = features.get(index);
+          Geometry geometry =
+              feature != null && feature.getDefaultGeometry() instanceof Geometry g ? g : null;
+          return new Entry(
+              feature,
+              index,
+              buildCellValues(rowMeta, index, row, true),
+              buildCellValues(rowMeta, index, row, false),
+              buildHitLabel(rowMeta, row, geometryFieldIndex, geometry, index),
+              row);
+        }
+      };
+    }
+    List<Entry> nextEntries = new ArrayList<>();
+    for (int rowIndex = 0; rowIndex < samplingResult.rows().size(); rowIndex++) {
+      SimpleFeature feature = features.get(rowIndex);
+      Geometry geometry =
+          feature != null && feature.getDefaultGeometry() instanceof Geometry current
+              ? current
+              : null;
       Object[] row =
           rowIndex >= 0 && rowIndex < samplingResult.rows().size()
               ? samplingResult.rows().get(rowIndex)
@@ -179,7 +222,8 @@ final class GeometryInspectorFeatureTableModel {
               rowIndex,
               displayCellValues,
               clipboardCellValues,
-              buildHitLabel(rowMeta, row, geometryFieldIndex, geometry, rowIndex)));
+              buildHitLabel(rowMeta, row, geometryFieldIndex, geometry, rowIndex),
+              row.clone()));
     }
 
     nextEntries.sort(Comparator.comparingInt(Entry::rowIndex));
@@ -187,6 +231,8 @@ final class GeometryInspectorFeatureTableModel {
   }
 
   private Map<Integer, Integer> buildIndex(List<Entry> nextEntries) {
+    if (nextEntries instanceof java.util.AbstractList && !(nextEntries instanceof ArrayList))
+      return Map.of();
     Map<Integer, Integer> index = new LinkedHashMap<>();
     for (int tableIndex = 0; tableIndex < nextEntries.size(); tableIndex++) {
       index.put(nextEntries.get(tableIndex).rowIndex(), tableIndex);
@@ -195,8 +241,11 @@ final class GeometryInspectorFeatureTableModel {
   }
 
   private Map<String, Integer> buildFeatureIdIndex(List<Entry> nextEntries) {
+    if (nextEntries instanceof java.util.AbstractList && !(nextEntries instanceof ArrayList))
+      return Map.of();
     Map<String, Integer> index = new LinkedHashMap<>();
     for (int tableIndex = 0; tableIndex < nextEntries.size(); tableIndex++) {
+      if (nextEntries.get(tableIndex).feature() == null) continue;
       String featureId = nextEntries.get(tableIndex).feature().getID();
       if (featureId == null || featureId.isBlank()) {
         continue;
@@ -207,9 +256,12 @@ final class GeometryInspectorFeatureTableModel {
   }
 
   private Map<SimpleFeature, Integer> buildFeatureReferenceIndex(List<Entry> nextEntries) {
+    if (nextEntries instanceof java.util.AbstractList && !(nextEntries instanceof ArrayList))
+      return Map.of();
     Map<SimpleFeature, Integer> index = new IdentityHashMap<>();
     for (int tableIndex = 0; tableIndex < nextEntries.size(); tableIndex++) {
-      index.put(nextEntries.get(tableIndex).feature(), tableIndex);
+      if (nextEntries.get(tableIndex).feature() != null)
+        index.put(nextEntries.get(tableIndex).feature(), tableIndex);
     }
     return index;
   }
@@ -302,6 +354,76 @@ final class GeometryInspectorFeatureTableModel {
     return value.substring(0, Math.max(0, maxLength - 3)) + "...";
   }
 
+  static int compareValues(Object a, Object b) {
+    if (a == b) return 0;
+    if (a == null) return 1;
+    if (b == null) return -1;
+    if (a instanceof Number && b instanceof Number) {
+      try {
+        return new java.math.BigDecimal(a.toString())
+            .compareTo(new java.math.BigDecimal(b.toString()));
+      } catch (NumberFormatException e) {
+        return Double.compare(((Number) a).doubleValue(), ((Number) b).doubleValue());
+      }
+    }
+    if (a instanceof java.util.Date x && b instanceof java.util.Date y) return x.compareTo(y);
+    if (a instanceof Boolean x && b instanceof Boolean y) return x.compareTo(y);
+    return a.toString().compareToIgnoreCase(b.toString());
+  }
+
+  GeometryInspectorFeatureTableModel filtered(String text) {
+    String needle = text.toLowerCase(Locale.ROOT);
+    return new GeometryInspectorFeatureTableModel(
+        columns,
+        entries.stream()
+            .filter(
+                e ->
+                    e.clipboardCellValues().stream()
+                        .anyMatch(v -> v.toLowerCase(Locale.ROOT).contains(needle)))
+            .toList());
+  }
+
+  GeometryInspectorFeatureTableModel query(
+      ch.so.agi.hop.geometry.inspector.data.RowQuery query, IRowMeta meta) {
+    List<Entry> selected =
+        entries.stream()
+            .filter(e -> query.matches(meta, e.rawValues()))
+            .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+    selected.sort(
+        (a, b) -> {
+          int n = query.compareRows(a.rawValues(), b.rawValues(), a.rowIndex(), b.rowIndex());
+          return n == 0 ? Integer.compare(a.rowIndex(), b.rowIndex()) : n;
+        });
+    return new GeometryInspectorFeatureTableModel(columns, selected);
+  }
+
+  GeometryInspectorFeatureTableModel indexed(
+      ch.so.agi.hop.geometry.inspector.data.QueryIndex index) {
+    List<Entry> source = entries;
+    var indexed =
+        new GeometryInspectorFeatureTableModel(
+            columns,
+            new java.util.AbstractList<Entry>() {
+              public int size() {
+                try {
+                  return Math.toIntExact(index.size());
+                } catch (java.io.IOException e) {
+                  throw new java.io.UncheckedIOException(e);
+                }
+              }
+
+              public Entry get(int position) {
+                try {
+                  return source.get(Math.toIntExact(index.ordinal(position)));
+                } catch (java.io.IOException e) {
+                  throw new java.io.UncheckedIOException(e);
+                }
+              }
+            });
+    indexed.queryIndex = index;
+    return indexed;
+  }
+
   static int rowIndexOf(SimpleFeature feature) {
     if (feature == null) {
       return -1;
@@ -325,7 +447,22 @@ final class GeometryInspectorFeatureTableModel {
       int rowIndex,
       List<String> cellValues,
       List<String> clipboardCellValues,
-      String popupLabel) {
+      String popupLabel,
+      Object[] rawValues) {
+    Entry(
+        SimpleFeature feature,
+        int rowIndex,
+        List<String> cells,
+        List<String> clipboard,
+        String label) {
+      this(feature, rowIndex, cells, clipboard, label, new Object[0]);
+    }
+
+    Object rawValueAt(int column) {
+      return column == 0
+          ? rowIndex
+          : column > 0 && column <= rawValues.length ? rawValues[column - 1] : null;
+    }
 
     String cellValueAt(int columnIndex) {
       if (columnIndex < 0 || columnIndex >= cellValues.size()) {

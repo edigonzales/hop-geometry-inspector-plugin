@@ -57,6 +57,20 @@ public class GeometryInspectorSettingsService {
   }
 
   public GeometryInspectorBackgroundMapConfig loadBackgroundMapConfig() {
+    if (store.get(KEY_SERVICE_URL, "__unset__").equals("__unset__")) {
+      var defaults = GeometryInspectorBackgroundMapConfig.swissDefault();
+      return new GeometryInspectorBackgroundMapConfig(
+          defaults.serviceUrl(),
+          defaults.layerNames(),
+          defaults.styleName(),
+          defaults.imageFormat(),
+          defaults.version(),
+          defaults.transparent(),
+          Boolean.parseBoolean(store.get(KEY_ENABLED_BY_DEFAULT, "true")),
+          defaults.serviceType(),
+          defaults.tileMatrixSet(),
+          defaults.dimensions());
+    }
     return new GeometryInspectorBackgroundMapConfig(
         store.get(KEY_SERVICE_URL, ""),
         store.get(KEY_LAYER_NAMES, ""),

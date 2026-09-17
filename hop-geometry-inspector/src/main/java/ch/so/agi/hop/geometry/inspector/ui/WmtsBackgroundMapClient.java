@@ -22,6 +22,7 @@ final class WmtsBackgroundMapClient implements BackgroundMapClient {
   private long cacheBytes;
   private final long cacheLimit;
   private volatile WmtsCatalog catalog;
+  private volatile String catalogUrl;
 
   private record Resolved(Integer srid, GeometryInspectorBackgroundMapConfig config) {}
 
@@ -88,15 +89,17 @@ final class WmtsBackgroundMapClient implements BackgroundMapClient {
   public BackgroundRenderResult render(BackgroundRenderRequest request) throws Exception {
     long token = generation.get();
     checkCurrent(token, request);
+    var requestConfig = config.forSrid(request.srid());
     WmtsCatalog current = catalog;
-    if (current == null) {
-      current = WmtsCatalog.load(config.serviceUrl());
+    if (current == null || !requestConfig.serviceUrl().equals(catalogUrl)) {
+      current = WmtsCatalog.load(requestConfig.serviceUrl());
       synchronized (this) {
         checkCurrent(token, request);
         catalog = current;
+        catalogUrl = requestConfig.serviceUrl();
       }
     }
-    var effective = current.resolve(config, request.srid());
+    var effective = current.resolve(requestConfig, request.srid());
     synchronized (this) {
       checkCurrent(token, request);
       resolved = new Resolved(request.srid(), effective);

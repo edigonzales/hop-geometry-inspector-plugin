@@ -1,0 +1,57 @@
+[[architecture]]
+= Architecture and testing
+
+== Responsibilities
+
+`CaptureService` clones/prunes pipelines and wraps the original Hop row handlers. `StreamDescriptor`
+identifies direction, peer, output kind and transform copy. `InspectionResult` keeps stream provenance,
+capture generation and completeness separate from its `RowStore`.
+
+`MemoryRowStore` owns samples. `DiskRowStore` stores Hop schema metadata, 8 MiB binary row blocks, per-row CRCs and a disk offset
+index. `CacheRepository` manages manifests, reader leases, budgets and cleanup. `QueryIndex` uses
+bounded chunks and two-way external merges, with capture ordinal as the stable tie-breaker.
+
+`ReplayPlanner` validates the graph and cache inputs before preparing an engine. Internal
+`ReplaySourceMeta` instances are only placed in the execution clone and are never saved into the
+user pipeline. The original upstream source is not initialized when replaced by a cache source.
+
+The existing Geometry Type shared classloader remains the owner of Geometry/JTS. Inspector workers
+use the plugin context classloader, including metadata serialization and geometry parsing.
+
+== Build and tests
+
+Follow `AGENTS.md` for the exact Geometry dependency, Maven settings and JDK setup.
+Run `mvn clean verify`, `python3 scripts/verify-package.py` and the installed classloader test against
+the built Inspector/Geometry ZIPs. Compatibility tests use JDK 25. Linux SWT tests require Xvfb.
+
+Unit/integration tests cover typed rows, disk queries, capture routing and replay source replacement.
+Installed-plugin tests validate runtime classloader identity and serialization through packaged JARs.
+User examples use standard Hop transforms; test fixtures and expected data live under `e2e/`.
+
+== Documentation
+
+The common `hop-plugin-parent` enables doclint during Maven verify. Its transform rules do not cover
+GUI plugins; `scripts/check-docs.py` validates the Inspector handbook and example XML separately.
+`python3 scripts/build-docs-site.py --serve` builds the working tree. CI passes `--revision` for the
+exact checked-out commit. Site validation checks local links, anchors, downloads and search entries.
+
+GitHub Pages must use the GitHub Actions deployment source. Pull requests only build; `main` deploys.
+Existing Maven workflow references, canonical ZIP publication and installed-test gates are preserved.
+
+== Desktop smoke acceptance
+
+Run `mvn test -DgeometryInspector.swtSmoke=true` on a desktop (under `xvfb-run -a` on
+Linux). The parent supplies `-XstartOnFirstThread` on macOS. Tests exercise the real
+SWT viewer and the background settings dialog; screenshots are written under `target/`.
+
+For manual acceptance, open `examples/geometry/inspect-geometry.hpl`, inspect Source,
+select the null and malformed rows, sort by id and change the geometry field. Details
+must follow the selected row. Add the Comparison result from the layer example, change
+visibility/order/opacity and pick overlapping geometry. Try an unavailable background
+URL and verify that rows remain selectable. Close the pipeline editor and confirm its
+Inspector workspace closes. Reopen a full cache after restarting Hop and compare the
+results of the linear and two-input replay examples.
+
+Disk writes apply backpressure on the background capture threads rather than queueing
+unbounded rows. Query runs contain at most 4096 ordinals; external merges use two input
+cursors. Each row has an integrity checksum checked during reads and replay preflight.

@@ -18,7 +18,7 @@ class GeometryInspectorFeatureTableModelTest {
   private final GeometryFeatureBuilder featureBuilder = new GeometryFeatureBuilder();
 
   @Test
-  void buildsEntriesForRenderableFeaturesWithRowAndAllSampleAttributes() {
+  void buildsEntriesForAllRowsIncludingMissingAndBrokenGeometries() {
     RowMeta rowMeta = new RowMeta();
     rowMeta.addValueMeta(new ValueMetaString("id"));
     rowMeta.addValueMeta(new ValueMetaString("name"));
@@ -37,7 +37,7 @@ class GeometryInspectorFeatureTableModelTest {
         new GeometryInspectorFeatureTableModel(
             samplingResult(rows, rowMeta), buildResult, "geom_wkt");
 
-    assertThat(model.size()).isEqualTo(2);
+    assertThat(model.size()).isEqualTo(4);
     assertThat(model.columnCount()).isEqualTo(5);
     assertThat(model.columnAt(0).label()).isEqualTo("Row");
     assertThat(model.columnAt(1).label()).isEqualTo("id");
@@ -51,14 +51,16 @@ class GeometryInspectorFeatureTableModelTest {
     assertThat(model.entryAt(0).cellValueAt(3)).isEqualTo("POINT (1 2)");
     assertThat(model.entryAt(0).cellValueAt(4)).isEqualTo("open");
     assertThat(model.entryAt(0).hitLabel()).isEqualTo("Row 0 | id=A-001 | name=Main street");
-    assertThat(model.entryAt(1).rowIndex()).isEqualTo(3);
-    assertThat(model.entryAt(1).cellValueAt(0)).isEqualTo("3");
-    assertThat(model.entryAt(1).cellValueAt(1)).isEqualTo("C-003");
-    assertThat(model.entryAt(1).cellValueAt(2)).isEqualTo("Side road");
-    assertThat(model.entryAt(1).cellValueAt(3)).isEqualTo("LINESTRING (0 0, 2 2)");
-    assertThat(model.entryAt(1).cellValueAt(4)).isEqualTo("review");
-    assertThat(model.indexOfRow(3)).isEqualTo(1);
-    assertThat(model.indexOfFeature(model.entryAt(1).feature())).isEqualTo(1);
+    assertThat(model.entryAt(3).rowIndex()).isEqualTo(3);
+    assertThat(model.entryAt(3).cellValueAt(0)).isEqualTo("3");
+    assertThat(model.entryAt(3).cellValueAt(1)).isEqualTo("C-003");
+    assertThat(model.entryAt(3).cellValueAt(2)).isEqualTo("Side road");
+    assertThat(model.entryAt(3).cellValueAt(3)).isEqualTo("LINESTRING (0 0, 2 2)");
+    assertThat(model.entryAt(3).cellValueAt(4)).isEqualTo("review");
+    assertThat(model.indexOfRow(3)).isEqualTo(3);
+    assertThat(model.indexOfFeature(model.entryAt(3).feature())).isEqualTo(3);
+    assertThat(model.entryAt(1).feature()).isNull();
+    assertThat(model.entryAt(2).feature()).isNull();
   }
 
   @Test
@@ -127,11 +129,11 @@ class GeometryInspectorFeatureTableModelTest {
     GeometryInspectorFeatureTableModel sortedAscending = sortedDescending.sortedByColumn(0, true);
 
     assertThat(sortedDescending.entryAt(0).rowIndex()).isEqualTo(2);
-    assertThat(sortedDescending.entryAt(1).rowIndex()).isEqualTo(0);
+    assertThat(sortedDescending.entryAt(1).rowIndex()).isEqualTo(1);
     assertThat(sortedDescending.indexOfRow(2)).isEqualTo(0);
-    assertThat(sortedDescending.indexOfRow(0)).isEqualTo(1);
+    assertThat(sortedDescending.indexOfRow(0)).isEqualTo(2);
     assertThat(sortedAscending.entryAt(0).rowIndex()).isEqualTo(0);
-    assertThat(sortedAscending.entryAt(1).rowIndex()).isEqualTo(2);
+    assertThat(sortedAscending.entryAt(1).rowIndex()).isEqualTo(1);
   }
 
   @Test
@@ -144,9 +146,7 @@ class GeometryInspectorFeatureTableModelTest {
     String longZ = prefix + "Z";
     String longA = prefix + "A";
     List<Object[]> rows =
-        List.of(
-            new Object[] {longZ, "POINT (0 0)"},
-            new Object[] {longA, "POINT (1 1)"});
+        List.of(new Object[] {longZ, "POINT (0 0)"}, new Object[] {longA, "POINT (1 1)"});
 
     GeometryBuildResult buildResult = featureBuilder.build(rowMeta, rows, "geom_wkt");
     GeometryInspectorFeatureTableModel model =
@@ -188,7 +188,8 @@ class GeometryInspectorFeatureTableModelTest {
     }
     SimpleFeature sameIdDifferentRowIndex = builder.buildFeature(selected.getID());
 
-    assertThat(GeometryInspectorFeatureTableModel.rowIndexOf(sameIdDifferentRowIndex)).isEqualTo(-1);
+    assertThat(GeometryInspectorFeatureTableModel.rowIndexOf(sameIdDifferentRowIndex))
+        .isEqualTo(-1);
     assertThat(model.indexOfFeature(sameIdDifferentRowIndex)).isEqualTo(0);
     assertThat(model.entryForFeature(sameIdDifferentRowIndex)).isEqualTo(model.entryAt(0));
   }

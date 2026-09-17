@@ -71,6 +71,30 @@ class GeometryInspectorSettingsServiceTest {
         .isEqualTo(GeometryInspectorBackgroundMapConfig.empty());
   }
 
+  @Test
+  void firstUseDefaultsToSwissGreyButDisabledSettingsRemainDisabled() {
+    var store = new InMemorySettingsStore();
+    var settings = new GeometryInspectorSettingsService(store);
+    var config = settings.loadBackgroundMapConfig();
+    assertThat(config.layerNames()).isEqualTo("ch.swisstopo.pixelkarte-grau");
+    assertThat(config.imageFormat()).isEqualTo("image/jpeg");
+    for (int srid : new int[] {2056, 21781, 3857, 4326})
+      assertThat(config.forSrid(srid).serviceUrl()).contains("EPSG/" + srid + "/");
+    settings.saveBackgroundMapConfig(
+        new GeometryInspectorBackgroundMapConfig(
+            config.serviceUrl(),
+            config.layerNames(),
+            config.styleName(),
+            config.imageFormat(),
+            config.version(),
+            false,
+            false,
+            config.serviceType(),
+            config.tileMatrixSet(),
+            config.dimensions()));
+    assertThat(settings.loadBackgroundMapConfig().enabledByDefault()).isFalse();
+  }
+
   private static final class InMemorySettingsStore
       implements GeometryInspectorSettingsService.SettingsStore {
     private final Map<String, String> values = new HashMap<>();

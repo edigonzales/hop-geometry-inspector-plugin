@@ -66,3 +66,17 @@ This tests installed plugin classloaders using Maven; it does not run a full Hop
 client or `hop-run` pipeline. The CI snapshot publish job depends on both verify
 and this installed test. The one-element `zip-descriptors` array still selects
 the shared schema-version 2 bundle path.
+
+## Documentation and examples
+
+Repository conventions follow Geometry Calculator revision
+`f82d7e2855e5450a89c32f18029c340ea624fef3`. Keep the existing Inspector modules and IDs.
+The English canonical handbook is `docs/inspector/data-inspector.adoc`; update it,
+`examples/` and `e2e/expected/` alongside behavior changes. Developer details belong
+in `docs/development/architecture.adoc`, not the README.
+
+Run `python3 scripts/check-docs.py` and `python3 scripts/build-docs-site.py`.
+The latter builds working files locally; CI supplies `--revision "$GITHUB_SHA"`.
+Do not commit generated documentation, downloads, caches or test output.
+Run `scripts/run-e2e.py --help` for installed example checks using a disposable
+Hop home and already verified ZIPs. Never rebuild the installed candidates.

@@ -26,9 +26,23 @@ public class GeometryFeatureBuilder {
   private final GeometryParser geometryParser = new GeometryParser();
 
   public GeometryBuildResult build(IRowMeta rowMeta, List<Object[]> rows, String geometryField) {
+    return buildLimited(rowMeta, rows, geometryField, Integer.MAX_VALUE, row -> true, () -> false);
+  }
+
+  public GeometryBuildResult buildLimited(
+      IRowMeta rowMeta,
+      List<Object[]> rows,
+      String geometryField,
+      int limit,
+      java.util.function.Predicate<Object[]> filter,
+      java.util.function.BooleanSupplier cancelled) {
     GeoToolsRuntimeSupport.initialize();
 
-    if (rowMeta == null || rows == null || rows.isEmpty()) {
+    if (rowMeta == null
+        || rows == null
+        || rows.isEmpty()
+        || geometryField == null
+        || geometryField.isBlank()) {
       return new GeometryBuildResult(
           List.of(),
           null,
@@ -55,7 +69,10 @@ public class GeometryFeatureBuilder {
     Set<Integer> positiveSrids = new LinkedHashSet<>();
 
     for (int rowIndex = 0; rowIndex < rows.size(); rowIndex++) {
+      if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted())
+        throw new java.util.concurrent.CancellationException();
       Object[] row = rows.get(rowIndex);
+      if (!filter.test(row)) continue;
       Object value = row.length > geometryIndex ? row[geometryIndex] : null;
 
       try {
@@ -65,10 +82,9 @@ public class GeometryFeatureBuilder {
           continue;
         }
 
-        renderableRows.add(new RowGeometry(rowIndex, geometry));
-        if (geometry.getSRID() > 0) {
-          positiveSrids.add(geometry.getSRID());
-        }
+        if (geometry.isEmpty()) continue;
+        if (renderableRows.size() < limit) renderableRows.add(new RowGeometry(rowIndex, geometry));
+        positiveSrids.add(Math.max(0, geometry.getSRID()));
       } catch (Exception e) {
         parseErrors++;
         if (parseErrorSamples.size() < MAX_PARSE_ERROR_SAMPLES) {
@@ -84,7 +100,7 @@ public class GeometryFeatureBuilder {
     String crsStatusMessage = "No renderable geometries";
 
     if (!renderableRows.isEmpty()) {
-      if (positiveSrids.isEmpty()) {
+      if (positiveSrids.isEmpty() || positiveSrids.contains(0)) {
         crsStatusMessage = "No positive SRID on sampled geometries";
       } else if (positiveSrids.size() > 1) {
         crsStatusMessage =

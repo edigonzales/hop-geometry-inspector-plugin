@@ -1,0 +1,123 @@
+<?xml version='1.0' encoding='utf-8'?>
+<pipeline>
+  <info>
+    <name>compare-layers</name>
+    <pipeline_type>Normal</pipeline_type>
+    <parameters />
+  </info>
+  <transform>
+    <name>Source</name>
+    <type>DataGrid</type>
+    <copies>1</copies>
+    <distribute>N</distribute>
+    <GUI>
+      <xloc>100</xloc>
+      <yloc>150</yloc>
+    </GUI>
+    <fields>
+      <field>
+        <name>id</name>
+        <type>Integer</type>
+        <length>-1</length>
+        <precision>-1</precision>
+        <set_empty_string>N</set_empty_string>
+      </field>
+      <field>
+        <name>name</name>
+        <type>String</type>
+        <length>-1</length>
+        <precision>-1</precision>
+        <set_empty_string>N</set_empty_string>
+      </field>
+      <field>
+        <name>geometry</name>
+        <type>String</type>
+        <length>-1</length>
+        <precision>-1</precision>
+        <set_empty_string>N</set_empty_string>
+      </field>
+    </fields>
+    <data>
+      <line>
+        <item>1</item>
+        <item>first</item>
+        <item>SRID=2056;POINT (2600000 1200000)</item>
+      </line>
+      <line>
+        <item>2</item>
+        <item>broken</item>
+        <item>invalid WKT</item>
+      </line>
+      <line>
+        <item>3</item>
+        <item>null</item>
+        <item />
+      </line>
+      <line>
+        <item>4</item>
+        <item>empty</item>
+        <item>POINT EMPTY</item>
+      </line>
+    </data>
+  </transform>
+  <transform>
+    <name>Comparison</name>
+    <type>DataGrid</type>
+    <copies>1</copies>
+    <distribute>N</distribute>
+    <GUI>
+      <xloc>100</xloc>
+      <yloc>150</yloc>
+    </GUI>
+    <fields>
+      <field>
+        <name>id</name>
+        <type>Integer</type>
+        <length>-1</length>
+        <precision>-1</precision>
+        <set_empty_string>N</set_empty_string>
+      </field>
+      <field>
+        <name>name</name>
+        <type>String</type>
+        <length>-1</length>
+        <precision>-1</precision>
+        <set_empty_string>N</set_empty_string>
+      </field>
+      <field>
+        <name>geometry</name>
+        <type>String</type>
+        <length>-1</length>
+        <precision>-1</precision>
+        <set_empty_string>N</set_empty_string>
+      </field>
+    </fields>
+    <data>
+      <line>
+        <item>1</item>
+        <item>shifted</item>
+        <item>SRID=2056;POINT (2600100 1200100)</item>
+      </line>
+    </data>
+  </transform>
+  <transform>
+    <name>Result</name>
+    <type>Dummy</type>
+    <copies>1</copies>
+    <distribute>N</distribute>
+    <GUI>
+      <xloc>400</xloc>
+      <yloc>150</yloc>
+    </GUI>
+  </transform>
+  <order>
+    <hop>
+      <from>Source</from>
+      <to>Result</to>
+      <enabled>Y</enabled>
+    </hop>
+  </order>
+  <transform_error_handling />
+  <attributes />
+  <notepads />
+</pipeline>

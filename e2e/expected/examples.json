@@ -1,0 +1,40 @@
+{
+  "rows": {
+    "Source": 3,
+    "Result": 3
+  },
+  "geometry": {
+    "Source": 4,
+    "Result": 4
+  },
+  "layers": {
+    "Source": 4,
+    "Comparison": 1,
+    "Result": 4
+  },
+  "streams": {
+    "Source": 4,
+    "Passed": 1,
+    "Rejected": 3
+  },
+  "replay": {
+    "Source": 4,
+    "Result": 4
+  },
+  "errors": {
+    "Source": 3,
+    "Valid": 2,
+    "Errors": 1
+  },
+  "replay-join": {
+    "Source": 4,
+    "Other": 4,
+    "Result": 4
+  },
+  "replay-branch": {
+    "Source": 4,
+    "Left": 4,
+    "Right": 4,
+    "Result": 8
+  }
+}

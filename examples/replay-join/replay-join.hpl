@@ -1,0 +1,152 @@
+<?xml version='1.0' encoding='utf-8'?>
+<pipeline>
+  <info>
+    <name>replay-two-input-join</name>
+    <pipeline_type>Normal</pipeline_type>
+    <parameters />
+  </info>
+  <transform>
+    <name>Source</name>
+    <type>DataGrid</type>
+    <copies>1</copies>
+    <distribute>N</distribute>
+    <GUI>
+      <xloc>100</xloc>
+      <yloc>150</yloc>
+    </GUI>
+    <fields>
+      <field>
+        <name>id</name>
+        <type>Integer</type>
+        <length>-1</length>
+        <precision>-1</precision>
+        <set_empty_string>N</set_empty_string>
+      </field>
+      <field>
+        <name>name</name>
+        <type>String</type>
+        <length>-1</length>
+        <precision>-1</precision>
+        <set_empty_string>N</set_empty_string>
+      </field>
+      <field>
+        <name>geometry</name>
+        <type>String</type>
+        <length>-1</length>
+        <precision>-1</precision>
+        <set_empty_string>N</set_empty_string>
+      </field>
+    </fields>
+    <data>
+      <line>
+        <item>1</item>
+        <item>first</item>
+        <item>SRID=2056;POINT (2600000 1200000)</item>
+      </line>
+      <line>
+        <item>2</item>
+        <item>broken</item>
+        <item>invalid WKT</item>
+      </line>
+      <line>
+        <item>3</item>
+        <item>null</item>
+        <item />
+      </line>
+      <line>
+        <item>4</item>
+        <item>empty</item>
+        <item>POINT EMPTY</item>
+      </line>
+    </data>
+  </transform>
+  <transform>
+    <name>Result</name>
+    <type>MergeJoin</type>
+    <copies>1</copies>
+    <distribute>N</distribute>
+    <GUI>
+      <xloc>350</xloc>
+      <yloc>150</yloc>
+    </GUI>
+    <join_type>INNER</join_type>
+    <transform1>Source</transform1>
+    <transform2>Other</transform2>
+    <keys_1>
+      <key>id</key>
+    </keys_1>
+    <keys_2>
+      <key>id</key>
+    </keys_2>
+  </transform>
+  <order>
+    <hop>
+      <from>Source</from>
+      <to>Result</to>
+      <enabled>Y</enabled>
+    </hop>
+    <hop>
+      <from>Other</from>
+      <to>Result</to>
+      <enabled>Y</enabled>
+    </hop>
+  </order>
+  <transform_error_handling />
+  <attributes />
+  <notepads />
+  <transform>
+    <name>Other</name>
+    <type>DataGrid</type>
+    <copies>1</copies>
+    <distribute>N</distribute>
+    <GUI>
+      <xloc>100</xloc>
+      <yloc>350</yloc>
+    </GUI>
+    <fields>
+      <field>
+        <name>id</name>
+        <type>Integer</type>
+        <length>-1</length>
+        <precision>-1</precision>
+        <set_empty_string>N</set_empty_string>
+      </field>
+      <field>
+        <name>name</name>
+        <type>String</type>
+        <length>-1</length>
+        <precision>-1</precision>
+        <set_empty_string>N</set_empty_string>
+      </field>
+      <field>
+        <name>geometry</name>
+        <type>String</type>
+        <length>-1</length>
+        <precision>-1</precision>
+        <set_empty_string>N</set_empty_string>
+      </field>
+    </fields>
+    <data>
+      <line>
+        <item>1</item>
+        <item>first</item>
+        <item>SRID=2056;POINT (2600000 1200000)</item>
+      </line>
+      <line>
+        <item>2</item>
+        <item>broken</item>
+        <item>invalid WKT</item>
+      </line>
+      <line>
+        <item>3</item>
+        <item>null</item>
+        <item />
+      </line>
+      <line>
+        <item>4</item>
+        <item>empty</item>
+        <item>POINT EMPTY</item>
+      </line>
+    </data>
+  </transform>
+</pipeline>

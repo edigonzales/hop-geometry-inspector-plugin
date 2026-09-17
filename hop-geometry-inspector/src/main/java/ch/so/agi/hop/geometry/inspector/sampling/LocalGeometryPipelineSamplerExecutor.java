@@ -1,7 +1,6 @@
 package ch.so.agi.hop.geometry.inspector.sampling;
 
 import ch.so.agi.hop.geometry.inspector.model.GeometryInspectorOptions;
-import ch.so.agi.hop.geometry.inspector.model.GeometryInspectionSide;
 import ch.so.agi.hop.geometry.inspector.model.SamplingMode;
 import ch.so.agi.hop.geometry.inspector.model.SamplingResult;
 import java.util.List;
@@ -135,6 +134,10 @@ public class LocalGeometryPipelineSamplerExecutor implements GeometryPipelineSam
     long start = System.currentTimeMillis();
 
     while (pipeline.isRunning() || pipeline.isPreparing()) {
+      if (System.currentTimeMillis() - start >= timeoutMillis) {
+        pipeline.stopAll();
+        return true;
+      }
       if (options.mode() == SamplingMode.FIRST) {
         if (shouldStopEarly(options, inputCollector, outputCapture)) {
           pipeline.stopAll();

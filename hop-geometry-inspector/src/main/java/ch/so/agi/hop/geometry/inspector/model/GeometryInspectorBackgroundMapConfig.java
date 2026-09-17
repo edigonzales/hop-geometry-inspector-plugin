@@ -54,6 +54,37 @@ public record GeometryInspectorBackgroundMapConfig(
     version = normalize(version).isBlank() ? "1.3.0" : normalize(version);
   }
 
+  public static GeometryInspectorBackgroundMapConfig swissDefault() {
+    return new GeometryInspectorBackgroundMapConfig(
+        "https://wmts.geo.admin.ch/EPSG/{srid}/1.0.0/WMTSCapabilities.xml",
+        "ch.swisstopo.pixelkarte-grau",
+        "",
+        "image/jpeg",
+        "1.0.0",
+        false,
+        true,
+        ServiceType.WMTS,
+        "",
+        Map.of());
+  }
+
+  public GeometryInspectorBackgroundMapConfig forSrid(Integer srid) {
+    if (!serviceUrl.contains("{srid}")) return this;
+    if (srid == null || !List.of(2056, 21781, 3857, 4326).contains(srid))
+      throw new IllegalArgumentException("swisstopo background is unavailable for this CRS");
+    return new GeometryInspectorBackgroundMapConfig(
+        serviceUrl.replace("{srid}", srid.toString()),
+        layerNames,
+        styleName,
+        imageFormat,
+        version,
+        transparent,
+        enabledByDefault,
+        serviceType,
+        tileMatrixSet,
+        dimensions);
+  }
+
   public static GeometryInspectorBackgroundMapConfig empty() {
     return new GeometryInspectorBackgroundMapConfig("", "", "", "image/png", "1.3.0", true, true);
   }
