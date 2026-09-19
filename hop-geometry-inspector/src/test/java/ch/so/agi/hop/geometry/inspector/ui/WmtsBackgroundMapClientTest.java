@@ -12,11 +12,16 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.imageio.ImageIO;
+import javax.xml.parsers.SAXParserFactory;
 import org.geotools.geometry.jts.ReferencedEnvelope;
 import org.geotools.referencing.CRS;
 import org.junit.jupiter.api.*;
 
 class WmtsBackgroundMapClientTest {
+  private static final String SAX_PARSER_FACTORY_PROPERTY =
+      "javax.xml.parsers.SAXParserFactory";
+  private static final String XERCES_PROVIDER = "org.apache.xerces.jaxp.SAXParserFactoryImpl";
+
   HttpServer server;
   ExecutorService httpWorkers;
   String base;
@@ -280,6 +285,22 @@ class WmtsBackgroundMapClientTest {
   }
 
   @Test
+  void loadsCapabilitiesWithHopXercesProviderAndRestoresIt() throws Exception {
+    String previous = System.getProperty(SAX_PARSER_FACTORY_PROPERTY);
+    try {
+      System.setProperty(SAX_PARSER_FACTORY_PROPERTY, XERCES_PROVIDER);
+
+      WmtsCatalog loaded = WmtsCatalog.load(base + "/caps");
+
+      assertThat(loaded.capabilities.getLayerList()).hasSize(1);
+      assertThat(loaded.layer("base").getName()).isEqualTo("base");
+      assertThat(SAXParserFactory.newInstance().getClass().getName()).isEqualTo(XERCES_PROVIDER);
+    } finally {
+      restoreSaxParserFactory(previous);
+    }
+  }
+
+  @Test
   void enforcesLruByteBudget() throws Exception {
     var client = new WmtsBackgroundMapClient(config(), 2L * 256 * 256 * 4);
     clients.add(client);
@@ -365,5 +386,13 @@ class WmtsBackgroundMapClientTest {
         document.replace(
             "<MatrixWidth>2</MatrixWidth>", "<MatrixWidth>" + matrixColumns + "</MatrixWidth>");
     return noDefault ? document.replace("<Default>current</Default>", "") : document;
+  }
+
+  private static void restoreSaxParserFactory(String previous) {
+    if (previous == null) {
+      System.clearProperty(SAX_PARSER_FACTORY_PROPERTY);
+    } else {
+      System.setProperty(SAX_PARSER_FACTORY_PROPERTY, previous);
+    }
   }
 }

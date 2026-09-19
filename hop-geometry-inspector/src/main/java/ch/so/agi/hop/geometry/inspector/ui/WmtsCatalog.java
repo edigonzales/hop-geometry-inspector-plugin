@@ -27,9 +27,12 @@ final class WmtsCatalog {
     URL address = new URL(url);
     var response = client.get(address);
     try {
-      var parsed = new org.geotools.ows.wmts.response.WMTSGetCapabilitiesResponse(response);
-      return new WmtsCatalog(
-          new WebMapTileServer(address, client, (WMTSCapabilities) parsed.getCapabilities()));
+      return GeometryInspectorXmlSupport.withJdkSaxParser(
+          () -> {
+            var parsed = new org.geotools.ows.wmts.response.WMTSGetCapabilitiesResponse(response);
+            return new WmtsCatalog(
+                new WebMapTileServer(address, client, (WMTSCapabilities) parsed.getCapabilities()));
+          });
     } finally {
       response.dispose();
     }

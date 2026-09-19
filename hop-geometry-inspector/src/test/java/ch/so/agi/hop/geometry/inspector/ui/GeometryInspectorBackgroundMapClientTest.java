@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicInteger;
+import javax.xml.parsers.SAXParserFactory;
 import org.geotools.api.geometry.Bounds;
 import org.geotools.data.ows.Response;
 import org.geotools.http.HTTPResponse;
@@ -23,6 +24,10 @@ import org.geotools.geometry.jts.ReferencedEnvelope;
 import org.junit.jupiter.api.Test;
 
 class GeometryInspectorBackgroundMapClientTest {
+  private static final String SAX_PARSER_FACTORY_PROPERTY =
+      "javax.xml.parsers.SAXParserFactory";
+  private static final String XERCES_PROVIDER = "org.apache.xerces.jaxp.SAXParserFactoryImpl";
+
 
   @Test
   void buildsCapabilitiesUrlAndRequestParameters() {
@@ -172,6 +177,60 @@ class GeometryInspectorBackgroundMapClientTest {
     client.resetInitialization();
     assertThat(client.initializationState())
         .isEqualTo(GeometryInspectorBackgroundMapClient.InitializationState.UNINITIALIZED);
+  }
+
+  @Test
+  void usesJdkSaxProviderDuringWmsInitializationAndRestoresIt() {
+    String previous = System.getProperty(SAX_PARSER_FACTORY_PROPERTY);
+    AtomicInteger attempts = new AtomicInteger();
+    AtomicInteger jdkProviderCalls = new AtomicInteger();
+    String jdkProvider = SAXParserFactory.newDefaultInstance().getClass().getName();
+    try {
+      System.setProperty(SAX_PARSER_FACTORY_PROPERTY, XERCES_PROVIDER);
+      GeometryInspectorBackgroundMapClient client =
+          new GeometryInspectorBackgroundMapClient(
+              new GeometryInspectorBackgroundMapConfig(
+                  "https://example.com/wms",
+                  "base",
+                  "",
+                  "image/png",
+                  "1.3.0",
+                  true,
+                  true),
+              capabilitiesUrl -> {
+                attempts.incrementAndGet();
+                if (SAXParserFactory.newInstance().getClass().getName().equals(jdkProvider)) {
+                  jdkProviderCalls.incrementAndGet();
+                }
+                throw new IOException("boom");
+              });
+
+      assertThatThrownBy(
+              () ->
+                  client.render(
+                      new ReferencedEnvelope(0.0d, 100.0d, 0.0d, 50.0d, null),
+                      300,
+                      300,
+                      100,
+                      96,
+                      2056,
+                      1L))
+          .isInstanceOf(IllegalStateException.class)
+          .hasMessageContaining("WMS initialization failed");
+      assertThat(attempts).hasValue(1);
+      assertThat(jdkProviderCalls).hasValue(1);
+      assertThat(System.getProperty(SAX_PARSER_FACTORY_PROPERTY)).isEqualTo(XERCES_PROVIDER);
+    } finally {
+      restoreSaxParserFactory(previous);
+    }
+  }
+
+  private static void restoreSaxParserFactory(String previous) {
+    if (previous == null) {
+      System.clearProperty(SAX_PARSER_FACTORY_PROPERTY);
+    } else {
+      System.setProperty(SAX_PARSER_FACTORY_PROPERTY, previous);
+    }
   }
 
   private static final class RecordingGetMapRequest implements GetMapRequest {

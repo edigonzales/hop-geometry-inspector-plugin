@@ -111,6 +111,7 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
   private final Table attributeTable;
   private final Text geometryDetailText;
   private final Label statusLabel;
+  private String lastStatusText;
 
   private GeometryBuildResult currentBuildResult;
   private GeometryInspectorFeatureTableModel featureTableModel;
@@ -2318,6 +2319,26 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
       return;
     }
 
+    String nextStatusText = buildStatusText();
+    if (!shouldUpdateStatusText(lastStatusText, nextStatusText)) {
+      return;
+    }
+
+    int currentWidth = statusLabel.getSize().x;
+    int currentHeight = statusLabel.getSize().y;
+    statusLabel.setText(nextStatusText);
+    lastStatusText = nextStatusText;
+
+    int preferredHeight =
+        currentWidth > 0 ? statusLabel.computeSize(currentWidth, SWT.DEFAULT).y : 0;
+    if (shouldRelayoutStatusLabel(currentWidth, currentHeight, preferredHeight)) {
+      statusLabel.getParent().layout(true, true);
+    } else {
+      statusLabel.redraw();
+    }
+  }
+
+  private String buildStatusText() {
     StringBuilder status = new StringBuilder();
     status.append("source=").append(describeEffectiveSide());
     if (samplingResult.autoSwitched()) {
@@ -2356,8 +2377,15 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
     if (selectedRowIndex != null) {
       status.append(" | selected row=").append(selectedRowIndex);
     }
-    statusLabel.setText(status.toString());
-    statusLabel.getParent().layout();
+    return status.toString();
+  }
+
+  static boolean shouldUpdateStatusText(String previousText, String nextText) {
+    return !Objects.equals(previousText, nextText);
+  }
+
+  static boolean shouldRelayoutStatusLabel(int width, int height, int preferredHeight) {
+    return width <= 0 || height <= 0 || preferredHeight != height;
   }
 
   private void updateInspectionSourceLabel() {

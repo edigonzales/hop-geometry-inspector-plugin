@@ -117,6 +117,17 @@ class DataInspectorSmokeTest {
       pump(display);
       assertThat(table.getItemCount()).isEqualTo(3);
       Shell shell = (Shell) field(viewer, "shell");
+      Label status = (Label) field(viewer, "statusLabel");
+      var updateStatus =
+          viewer.getClass().getDeclaredMethod("updateStatusLabel");
+      updateStatus.setAccessible(true);
+      String statusText = status.getText();
+      var shellSize = shell.getSize();
+      updateStatus.invoke(viewer);
+      updateStatus.invoke(viewer);
+      pump(display);
+      assertThat(status.getText()).isEqualTo(statusText);
+      assertThat(shell.getSize()).isEqualTo(shellSize);
       var image = new org.eclipse.swt.graphics.Image(display, shell.getSize().x, shell.getSize().y);
       var gc = new org.eclipse.swt.graphics.GC(shell);
       try {

@@ -196,7 +196,9 @@ final class GeometryInspectorBackgroundMapClient implements BackgroundMapClient 
 
     String capabilitiesUrl = buildCapabilitiesUrl(config.serviceUrl(), config.version());
     try {
-      webMapServer = webMapServerFactory.create(capabilitiesUrl);
+      webMapServer =
+          GeometryInspectorXmlSupport.withJdkSaxParser(
+              () -> webMapServerFactory.create(capabilitiesUrl));
       resolvedLayers = new ArrayList<>();
       for (String layerName : config.parsedLayerNames()) {
         resolvedLayers.add(
