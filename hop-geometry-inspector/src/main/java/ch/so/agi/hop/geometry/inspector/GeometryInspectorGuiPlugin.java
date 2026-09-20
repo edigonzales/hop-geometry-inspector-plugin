@@ -49,13 +49,18 @@ public class GeometryInspectorGuiPlugin {
       category = "Preview",
       categoryOrder = "3")
   public void inspectGeometries(HopGuiPipelineTransformContext context) {
+    startInspection(context, false);
+  }
+
+  private void startInspection(
+      HopGuiPipelineTransformContext context, boolean completeCacheDefault) {
     try {
       List<GeometryFieldCandidate> outputCandidates = detectOutputCandidates(context);
       List<GeometryFieldCandidate> inputCandidates = detectInputCandidates(context);
       GeometryInspectorOptionsDialog dialog =
           new GeometryInspectorOptionsDialog(
               HopGui.getInstance().getShell(), outputCandidates, inputCandidates, settingsService);
-      GeometryInspectorOptions options = dialog.open();
+      GeometryInspectorOptions options = dialog.open(completeCacheDefault);
       if (options == null) {
         return;
       }
@@ -158,6 +163,10 @@ public class GeometryInspectorGuiPlugin {
               source,
               variables);
       if (choice == null) return;
+      if (choice.action().equals("Record")) {
+        startInspection(context, true);
+        return;
+      }
       java.util.concurrent.atomic.AtomicBoolean cancelled =
           new java.util.concurrent.atomic.AtomicBoolean();
       Shell[] progress = {null};

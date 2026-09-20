@@ -23,8 +23,8 @@ public final class CacheDialog {
     shell.setLayout(new GridLayout(6, false));
     Label info = new Label(shell, SWT.WRAP);
     info.setText(
-        "Select caches to open or supply as replay inputs. Replay does not refresh external"
-            + " sources.\n"
+        "Select caches to open or supply as replay inputs. A cached external source is not"
+            + " refreshed during replay; a Vector Reader included in the section runs normally.\n"
             + "For Run Between, the context transform is the start; choose the end below.");
     info.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false, 6, 1));
     Table table = new Table(shell, SWT.BORDER | SWT.CHECK | SWT.FULL_SELECTION | SWT.V_SCROLL);
@@ -60,6 +60,15 @@ public final class CacheDialog {
             "Checking..."
           });
     }
+    GridData emptyStateData = new GridData(SWT.FILL, SWT.CENTER, true, false, 6, 1);
+    Label emptyState = new Label(shell, SWT.WRAP);
+    emptyState.setLayoutData(emptyStateData);
+    emptyState.setText(
+        "No caches have been recorded yet. Use 'Record complete cache...' below, or open "
+            + "'Inspect data...', select 'Record complete disk cache', and choose the OUTPUT MAIN "
+            + "stream.");
+    emptyState.setVisible(entries.isEmpty());
+    emptyStateData.exclude = !entries.isEmpty();
     var worker =
         ch.so.agi.hop.geometry.inspector.GeometryInspectorClassLoaderSupport
             .newPluginContextThreadFactory()
@@ -105,10 +114,36 @@ public final class CacheDialog {
     end.setText(start);
     end.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false, 6, 1));
     Choice[] result = {null};
+    Button[] selectionButtons = new Button[3];
+    Runnable updateEmptyState =
+        () -> {
+          boolean empty = table.getItemCount() == 0;
+          emptyState.setVisible(empty);
+          emptyStateData.exclude = !empty;
+          shell.layout(true, true);
+        };
+    Runnable updateSelectionButtons =
+        () -> {
+          boolean hasSelection =
+              java.util.Arrays.stream(table.getItems()).anyMatch(TableItem::getChecked);
+          for (Button button : selectionButtons)
+            if (button != null) button.setEnabled(hasSelection);
+        };
+    Button recordButton = new Button(shell, SWT.PUSH);
+    recordButton.setText("Record complete cache...");
+    recordButton.addListener(
+        SWT.Selection,
+        e -> {
+          result[0] = new Choice(List.of(), "Record", end.getText());
+          shell.dispose();
+        });
     for (String action : List.of("Open", "Delete", "Record again", "TO", "FROM", "BETWEEN")) {
       Button button = new Button(shell, SWT.PUSH);
       button.setText(action.length() > 4 ? action : "Run " + action);
       if (action.equals("Open") || action.equals("Delete")) button.setText(action);
+      if (action.equals("Open")) selectionButtons[0] = button;
+      if (action.equals("Delete")) selectionButtons[1] = button;
+      if (action.equals("Record again")) selectionButtons[2] = button;
       button.addListener(
           SWT.Selection,
           e -> {
@@ -127,12 +162,16 @@ public final class CacheDialog {
                   box.setMessage(ex.getMessage());
                   box.open();
                 }
+              updateEmptyState.run();
+              updateSelectionButtons.run();
               return;
             }
             result[0] = new Choice(ids, action, end.getText());
             shell.dispose();
           });
     }
+    table.addListener(SWT.Selection, e -> updateSelectionButtons.run());
+    updateSelectionButtons.run();
     shell.pack();
     shell.open();
     while (!shell.isDisposed()) {

@@ -114,8 +114,10 @@ Toggle the background off and on to retry/reload capabilities. HiDPI uses physic
 
 == Caches
 
-Open *Data Inspector caches / replay...* from a transform context menu. Select caches to open or
-delete. An open cache is protected from automatic or manual deletion. Caches survive Hop restarts;
+Open *Data Inspector caches / replay...* from a transform context menu. If the list is empty, use
+*Record complete cache...* or open *Inspect data...*, select *Record complete disk cache*, and
+choose the transform's `OUTPUT MAIN` stream. Select caches to open or delete. An open cache is
+protected from automatic or manual deletion. Caches survive Hop restarts;
 interrupted recordings remain incomplete and cannot be replayed.
 
 Defaults: `${user.home}/.hop/data-inspector/cache`, 10 GiB overall and seven days since last access.
@@ -138,7 +140,8 @@ again when source contents may have changed.
 Choose caches and *Run TO*, *Run FROM* or *Run BETWEEN*. The context transform is the starting
 selection; choose the second endpoint for BETWEEN. The execution dialog lists caches and every
 transform to execute, including writers. Confirming execution runs that section with its normal
-side effects.
+side effects. A Vector Reader (`SOGIS_VECTOR_READER`) can execute normally in a replay section;
+when it is replaced by a complete cache, its external file is not read again.
 
 * TO executes the required predecessors and selected transform, stopping after it. Valid cached
   boundaries replace predecessors where possible.
@@ -149,8 +152,9 @@ side effects.
 Multiple inputs must originate from the same capture generation. There is no silent fallback to a
 fresh full execution when required caches are absent, incomplete, incompatible or stale.
 
-The first implementation accepts a conservative set of standard row-stream transforms. Unsupported
-plugins are rejected before engine initialization. It excludes cycles, partitioning, multiple copies,
+The first implementation accepts a conservative set of standard row-stream transforms plus the
+Vector Reader. Unsupported plugins are rejected before engine initialization. It excludes cycles,
+partitioning, multiple copies,
 non-normal pipeline modes and nested execution. Cache boundaries currently require logical MAIN
 output; directed/error caches are inspectable but are not accepted as replay sources.
 

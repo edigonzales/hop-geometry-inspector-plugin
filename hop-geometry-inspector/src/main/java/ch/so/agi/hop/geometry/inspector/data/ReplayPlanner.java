@@ -47,7 +47,8 @@ public final class ReplayPlanner {
           "UniqueRowsByHashSet",
           "Append",
           "SwitchCase",
-          "GEOMETRY_CALCULATOR_TRANSFORM");
+          "GEOMETRY_CALCULATOR_TRANSFORM",
+          "SOGIS_VECTOR_READER");
 
   public Plan plan(
       PipelineMeta source,
@@ -106,7 +107,10 @@ public final class ReplayPlanner {
     for (String name : boundary) {
       var valid = validCaches(source, name, caches, variables, provider);
       if (valid.isEmpty())
-        throw new IllegalArgumentException("Missing complete current cache for " + name);
+        throw new IllegalArgumentException(
+            "Missing complete current cache for "
+                + name
+                + ". Record the OUTPUT MAIN stream with a complete disk cache first.");
       replacements.put(name, valid);
     }
     for (String name : execute) {
@@ -119,7 +123,7 @@ public final class ReplayPlanner {
                 + name
                 + " ("
                 + transform.getTransformPluginId()
-                + ")");
+                + "). Inspect it directly or choose a replay boundary that excludes it.");
     }
     List<InspectionResult> inputs = replacements.values().stream().flatMap(List::stream).toList();
     if (inputs.stream().map(InspectionResult::generation).distinct().count() > 1)

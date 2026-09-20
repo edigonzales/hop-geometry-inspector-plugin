@@ -89,6 +89,92 @@ class ReplayPlannerTest {
   }
 
   @Test
+  void acceptsVectorReaderAsReplayStartWithoutAReferenceCache() throws Exception {
+    var p = new PipelineMeta();
+    p.setName("vector-reader");
+    var reader = new TransformMeta("SOGIS_VECTOR_READER", "Reader", new DummyMeta());
+    var result = new TransformMeta("Dummy", "Result", new DummyMeta());
+    p.addTransform(reader);
+    p.addTransform(result);
+    p.addPipelineHop(new PipelineHopMeta(reader, result));
+
+    var planner = new ReplayPlanner();
+    var variables = new Variables();
+    var provider = new MemoryMetadataProvider();
+    var to = planner.plan(p, variables, provider, ReplayPlanner.Mode.TO, "Reader", null, List.of());
+    assertThat(to.executing()).containsExactly("Reader");
+
+    var from =
+        planner.plan(p, variables, provider, ReplayPlanner.Mode.FROM, "Reader", null, List.of());
+    assertThat(from.executing()).containsExactly("Reader", "Result");
+  }
+
+  @Test
+  void usesCompleteVectorReaderCacheForDownstreamFromAndBetweenReplay() throws Exception {
+    var p = new PipelineMeta();
+    p.setName("vector-reader-boundary");
+    var reader = new TransformMeta("SOGIS_VECTOR_READER", "Reader", new DummyMeta());
+    var middle = new TransformMeta("Dummy", "Middle", new DummyMeta());
+    var result = new TransformMeta("Dummy", "Result", new DummyMeta());
+    p.addTransform(reader);
+    p.addTransform(middle);
+    p.addTransform(result);
+    p.addPipelineHop(new PipelineHopMeta(reader, middle));
+    p.addPipelineHop(new PipelineHopMeta(middle, result));
+
+    var planner = new ReplayPlanner();
+    var variables = new Variables();
+    var provider = new MemoryMetadataProvider();
+    assertThatThrownBy(
+            () ->
+                planner.plan(
+                    p,
+                    variables,
+                    provider,
+                    ReplayPlanner.Mode.FROM,
+                    "Middle",
+                    null,
+                    List.of()))
+        .hasMessageContaining("Missing complete current cache for Reader");
+
+    var readerCache = cache(p, "Reader", UUID.randomUUID());
+    var from =
+        planner.plan(
+            p,
+            variables,
+            provider,
+            ReplayPlanner.Mode.FROM,
+            "Middle",
+            null,
+            List.of(readerCache));
+    assertThat(from.executing()).containsExactly("Middle", "Result");
+    assertThat(from.pipeline().findTransform("Reader").getTransform())
+        .isInstanceOf(ReplaySourceMeta.class);
+
+    assertThatThrownBy(
+            () ->
+                planner.plan(
+                    p,
+                    variables,
+                    provider,
+                    ReplayPlanner.Mode.BETWEEN,
+                    "Middle",
+                    "Result",
+                    List.of()))
+        .hasMessageContaining("Missing complete current cache for Reader");
+    var between =
+        planner.plan(
+            p,
+            variables,
+            provider,
+            ReplayPlanner.Mode.BETWEEN,
+            "Middle",
+            "Result",
+            List.of(readerCache));
+    assertThat(between.executing()).containsExactly("Middle", "Result");
+  }
+
+  @Test
   void rejectsMissingInputsAndCycles() throws Exception {
     var p = pipeline();
     assertThatThrownBy(

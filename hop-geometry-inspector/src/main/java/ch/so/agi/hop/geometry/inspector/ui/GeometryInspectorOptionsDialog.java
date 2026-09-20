@@ -39,6 +39,10 @@ public class GeometryInspectorOptionsDialog {
   }
 
   public GeometryInspectorOptions open() {
+    return open(false);
+  }
+
+  public GeometryInspectorOptions open(boolean completeCacheDefault) {
     Shell shell = new Shell(parent, SWT.DIALOG_TRIM | SWT.APPLICATION_MODAL | SWT.RESIZE);
     shell.setText("Inspect data...");
     shell.setLayout(new GridLayout(2, false));
@@ -66,7 +70,7 @@ public class GeometryInspectorOptionsDialog {
     new Label(shell, SWT.NONE).setText("Capture mode");
     Combo captureMode = new Combo(shell, SWT.READ_ONLY);
     captureMode.setItems("Sample", "Record complete disk cache");
-    captureMode.select(0);
+    captureMode.select(completeCacheDefault ? 1 : 0);
     Label sampleSizeLabel = new Label(shell, SWT.NONE);
     sampleSizeLabel.setText("Sample size");
 
@@ -93,6 +97,9 @@ public class GeometryInspectorOptionsDialog {
           sampleSizeCombo.setEnabled(sample);
           samplingModeCombo.setEnabled(sample);
         });
+    boolean sample = captureMode.getSelectionIndex() == 0;
+    sampleSizeCombo.setEnabled(sample);
+    samplingModeCombo.setEnabled(sample);
     Label timeoutLabel = new Label(shell, SWT.NONE);
     timeoutLabel.setText("Timeout (seconds)");
 
