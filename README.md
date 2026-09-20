@@ -11,19 +11,28 @@
 - Conservative cache replay with a preview of the transforms to execute.
 - SWT/GeoTools map with the swisstopo grey pixel map as its default WMTS background.
 
-See the [handbook](https://edigonzales.github.io/hop-geometry-inspector-plugin/data-inspector/main/),
-[handbook source](docs/inspector/data-inspector.adoc),
-[architecture](docs/development/architecture.adoc) and [examples](examples/README.md)
-for behavior, restrictions and troubleshooting.
-
-## Requirements and installation
+## Requirements
 
 Use Hop **2.19**, Java **21**, and the matching
 [Geometry Type plugin](https://github.com/edigonzales/hop-geometry-type-plugin).
-Extract both plugin ZIPs into your Hop installation and restart Hop Desktop.
-The Inspector remains installed at `plugins/misc/hop-geometry-inspector`.
-Plugin, Maven and settings IDs remain compatible with the Geometry Inspector.
 Hop Web and remote execution are not supported.
+
+## Install
+
+Extract the Geometry Type and Geometry Inspector plugin ZIPs into your Hop
+installation and restart Hop Desktop. The Inspector remains installed at
+`plugins/misc/hop-geometry-inspector`; plugin, Maven and settings IDs remain
+compatible with the Geometry Inspector.
+
+## Documentation
+
+- [Rendered handbook](https://edigonzales.github.io/hop-geometry-inspector-plugin/data-inspector/main/)
+- [Handbook source](docs/inspector/data-inspector.adoc)
+- [Architecture](docs/development/architecture.adoc)
+- [Examples](examples/README.md)
+
+The handbook covers behavior, restrictions and troubleshooting. Build and
+preview it locally with `python3 scripts/build-docs-site.py`.
 
 ## Build and development
 
@@ -42,7 +51,7 @@ For a disposable development Hop installation, `scripts/dev-sync-hop-plugin.sh "
 builds and replaces the installed Inspector folder. Restart Hop after syncing.
 That convenience script skips tests; it does not replace verification.
 
-## Artifacts and modules
+## Modules and artifacts
 
 - `hop-geometry-inspector`: GUI, capture, row stores and replay.
 - `assemblies/assemblies-hop-geometry-inspector`: install ZIP under `target/`.

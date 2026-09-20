@@ -4,6 +4,8 @@
 
 Before changing pipelines or test setup, read the
 [shared CI contract](https://github.com/edigonzales/hop-plugin-ci/blob/main/docs/ci-contract.md).
+Also read the
+[plugin repository contract](https://github.com/edigonzales/hop-plugin-ci/blob/main/docs/plugin-repository-contract.md).
 The documentation follows `main`; use the interfaces at this repo's actual
 workflow/helper revisions and preserve existing pins and `ci-ref` values.
 

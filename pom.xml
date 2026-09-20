@@ -16,6 +16,13 @@
 
   <name>Apache Hop Geometry Inspector Plugin</name>
   <description>Desktop Geometry Inspector plugin for Apache Hop.</description>
+  <licenses>
+    <license>
+      <name>MIT License</name>
+      <url>https://opensource.org/license/mit/</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
 
   <modules>
     <module>hop-geometry-inspector</module>
