@@ -15,8 +15,9 @@ bounded chunks and two-way external merges, with capture ordinal as the stable t
 `ReplaySourceMeta` instances are only placed in the execution clone and are never saved into the
 user pipeline. The original upstream source is not initialized when replaced by a cache source.
 
-The existing Geometry Type shared classloader remains the owner of Geometry/JTS. Inspector workers
-use the plugin context classloader, including metadata serialization and geometry parsing.
+The existing Geometry Type shared classloader remains the owner of Geometry/JTS and the common
+GeoTools/Imagen/ImageIO-Ext/UOM runtime. Inspector workers use the plugin context classloader,
+including metadata serialization, geometry parsing and WMTS rendering.
 
 == Build and tests
 

@@ -9,7 +9,8 @@ clone. It retains the required upstream transforms and substitutes sinks for dow
 outside the inspected section. The original editor pipeline is not changed.
 
 The plugin is installed under `plugins/misc/hop-geometry-inspector`. Install the Geometry Type
-plugin separately. Both plugins share the Geometry runtime; do not copy JTS into the Inspector folder.
+plugin separately. Geometry Type owns the shared Geometry/JTS, GeoTools, Imagen, ImageIO-Ext and
+UOM runtime; do not copy these libraries into the Inspector folder.
 Apache Hop 2.19.0 and Java 21 are required; Java 25 is included in compatibility tests.
 
 == Input

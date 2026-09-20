@@ -20,6 +20,7 @@ import org.apache.hop.core.plugins.IPluginType;
 import org.apache.hop.core.plugins.Plugin;
 import org.apache.hop.core.plugins.PluginRegistry;
 import org.apache.hop.core.row.value.ValueMetaPluginType;
+import org.eclipse.imagen.PlanarImage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.locationtech.jts.geom.Geometry;
@@ -41,7 +42,10 @@ class GeometryInspectorClassLoaderBootstrapTest {
               "geometry",
               GeometryInspectorClassLoaderBootstrap.GEOMETRY_CLASSLOADER_GROUP,
               Map.of(Object.class, "com.atolcd.hop.core.row.value.ValueMetaGeometry"),
-              List.of(locationOf(CurveGeometrySupport.class), locationOf(Geometry.class)),
+              List.of(
+                  locationOf(CurveGeometrySupport.class),
+                  locationOf(Geometry.class),
+                  locationOf(PlanarImage.class)),
               CurveGeometrySupport.class.getProtectionDomain().getCodeSource().getLocation());
       registry.registerPlugin(ValueMetaPluginType.class, geometryPlugin);
 
@@ -88,6 +92,13 @@ class GeometryInspectorClassLoaderBootstrapTest {
       Class<?> curveFromInspector = inspectorLoader.loadClass(CircularString.class.getName());
       assertThat(curveFromInspector).isSameAs(curveFromGeometryPlugin);
       assertThat(curveFromInspector.getClassLoader()).isSameAs(geometryLoader);
+
+      Class<?> planarImageFromGeometryPlugin =
+          geometryLoader.loadClass(GeometryInspectorClassLoaderBootstrap.PLANAR_IMAGE_CLASS_NAME);
+      Class<?> planarImageFromInspector =
+          inspectorLoader.loadClass(GeometryInspectorClassLoaderBootstrap.PLANAR_IMAGE_CLASS_NAME);
+      assertThat(planarImageFromInspector).isSameAs(planarImageFromGeometryPlugin);
+      assertThat(planarImageFromInspector.getClassLoader()).isSameAs(geometryLoader);
     } finally {
       registry.reset();
     }

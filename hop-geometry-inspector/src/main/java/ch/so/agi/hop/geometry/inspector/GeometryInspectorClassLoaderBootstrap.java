@@ -31,6 +31,7 @@ public final class GeometryInspectorClassLoaderBootstrap
 
   static final String GEOMETRY_CLASSLOADER_GROUP = "sogeo-geometry";
   static final String GEOMETRY_VALUE_META_PLUGIN_ID = "43663879";
+  static final String PLANAR_IMAGE_CLASS_NAME = "org.eclipse.imagen.PlanarImage";
   static final String INSPECTOR_GUI_CLASS_NAME =
       "ch.so.agi.hop.geometry.inspector.GeometryInspectorGuiPlugin";
 
@@ -61,11 +62,17 @@ public final class GeometryInspectorClassLoaderBootstrap
     }
 
     // Make the geometry type the deterministic owner/creator of the shared loader. This ensures
-    // JTS and the SQL/MM true-curve classes are defined before the Inspector joins the group.
+    // JTS, the SQL/MM true-curve classes and Imagen are available before the Inspector joins the
+    // group.
     try {
-      pluginRegistry.getClassLoader(geometryPlugin);
-    } catch (HopPluginException e) {
-      throw new HopException("Unable to initialize the shared geometry classloader", e);
+      ClassLoader geometryLoader = pluginRegistry.getClassLoader(geometryPlugin);
+      geometryLoader.loadClass(PLANAR_IMAGE_CLASS_NAME);
+    } catch (HopPluginException | ClassNotFoundException e) {
+      throw new HopException(
+          "Unable to initialize the shared geometry classloader: the Geometry Type runtime must "
+              + "provide "
+              + PLANAR_IMAGE_CLASS_NAME,
+          e);
     }
 
     // Normal Hop GUI startup has not registered GUI plugins yet. Register the listener before

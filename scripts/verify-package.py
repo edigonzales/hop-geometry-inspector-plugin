@@ -90,39 +90,40 @@ def validate(path: Path, version: str) -> dict[str, object]:
         libraries = sorted(
             entry for entry in files if entry.startswith(f"{PLUGIN_ROOT}/lib/") and entry.endswith(".jar")
         )
-        required_libraries = {
-            f"{PLUGIN_ROOT}/lib/gt-main.jar",
-            f"{PLUGIN_ROOT}/lib/gt-render.jar",
-            f"{PLUGIN_ROOT}/lib/gt-wms.jar",
-            f"{PLUGIN_ROOT}/lib/gt-wmts.jar",
-            f"{PLUGIN_ROOT}/lib/gt-tile-client.jar",
-            f"{PLUGIN_ROOT}/lib/gt-epsg-hsql.jar",
-            f"{PLUGIN_ROOT}/lib/indriya.jar",
-            f"{PLUGIN_ROOT}/lib/unit-api.jar",
-            f"{PLUGIN_ROOT}/lib/systems-common.jar",
-        }
-        missing = sorted(required_libraries - set(libraries))
-        if missing:
-            raise SystemExit(f"Package is missing required runtime libraries: {missing}")
-
-        forbidden_libraries = {
-            f"{PLUGIN_ROOT}/lib/jts-core.jar",
-            f"{PLUGIN_ROOT}/lib/dependencies.xml",
-        }
-        unexpected = sorted(forbidden_libraries & set(files))
-        if unexpected:
-            raise SystemExit(f"Package contains shared-runtime files that must be provided by Geometry Type: {unexpected}")
-
-        # Assembly names omit versions; inspect each GeoTools JAR manifest instead.
-        expected_geotools = ET.parse(ROOT / "pom.xml").getroot().findtext(
-            f"{POM_NAMESPACE}properties/{POM_NAMESPACE}geotools.version"
+        shared_name_fragments = (
+            "gt-",
+            "imagen-",
+            "imageio-ext-",
+            "indriya-",
+            "unit-api-",
+            "systems-common-",
+            "uom-",
+            "si-",
+            "jts-core",
         )
+        unexpected = sorted(
+            library
+            for library in libraries
+            if Path(library).name.lower().startswith(shared_name_fragments)
+        )
+        if unexpected:
+            raise SystemExit(
+                "Package contains shared GeoTools/Imagen/ImageIO-Ext/UOM libraries "
+                f"that must be provided by Geometry Type: {unexpected}"
+            )
+
+        # Imagen operation JARs have names such as affine.jar and bandmerge.jar. The
+        # registry resource is therefore the authoritative check for Imagen.
         for library in libraries:
-            if Path(library).name.startswith("gt-"):
-                with zipfile.ZipFile(io.BytesIO(archive.read(library))) as jar:
-                    manifest = jar.read("META-INF/MANIFEST.MF").decode("utf-8")
-                    if f"Project-Version: {expected_geotools}" not in manifest.splitlines():
-                        raise SystemExit(f"Unexpected GeoTools version in {library}")
+            with zipfile.ZipFile(io.BytesIO(archive.read(library))) as jar:
+                if "META-INF/registryFile.imagen" in jar.namelist():
+                    raise SystemExit(
+                        "Package contains an Imagen registry resource in "
+                        f"{library}; shared Imagen must be provided by Geometry Type"
+                    )
+
+        if f"{PLUGIN_ROOT}/lib/jts-core.jar" in files:
+            raise SystemExit("Package contains jts-core; it must be provided by Geometry Type")
 
         validate_plugin_jar(plugin_jar_name, archive.read(plugin_jar_name))
 

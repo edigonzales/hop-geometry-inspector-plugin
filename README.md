@@ -23,6 +23,8 @@ Extract the Geometry Type and Geometry Inspector plugin ZIPs into your Hop
 installation and restart Hop Desktop. The Inspector remains installed at
 `plugins/misc/hop-geometry-inspector`; plugin, Maven and settings IDs remain
 compatible with the Geometry Inspector.
+The Geometry Type ZIP is the single owner of the shared GeoTools 35.1, Imagen 0.9.2,
+ImageIO-Ext and UOM runtime used by Inspector, Raster Type and Vector/Raster.
 
 ## Documentation
 
@@ -58,8 +60,8 @@ That convenience script skips tests; it does not replace verification.
 - `integration-tests`: tests against installed, canonical plugin ZIPs.
 - `examples`: directly openable user pipelines; `e2e`: automated expectations.
 
-Geometry Type and JTS are supplied by the shared Geometry runtime classloader,
-not duplicated in the Inspector ZIP.
+Geometry Type, JTS and the GeoTools/Imagen runtime are supplied by the shared Geometry
+runtime classloader, not duplicated in the Inspector ZIP.
 
 ## CI and publication
 

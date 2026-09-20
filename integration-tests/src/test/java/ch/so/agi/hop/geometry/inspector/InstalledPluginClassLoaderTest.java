@@ -3,9 +3,16 @@ package ch.so.agi.hop.geometry.inspector;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.apache.hop.core.Const;
 import org.apache.hop.core.HopEnvironment;
 import org.apache.hop.core.gui.plugin.GuiPluginType;
@@ -27,6 +34,7 @@ class InstalledPluginClassLoaderTest {
   private static final String VALUE_META_GEOMETRY_CLASS =
       "com.atolcd.hop.core.row.value.ValueMetaGeometry";
   private static final String JTS_GEOMETRY_CLASS = "org.locationtech.jts.geom.Geometry";
+  private static final String PLANAR_IMAGE_CLASS = "org.eclipse.imagen.PlanarImage";
   private static final String CIRCULAR_STRING_CLASS =
       "com.atolcd.hop.gis.geometry.curve.CircularString";
 
@@ -50,6 +58,8 @@ class InstalledPluginClassLoaderTest {
     assertThatThrownBy(() -> Class.forName(INSPECTOR_GUI_CLASS, false, harnessLoader))
         .isInstanceOf(ClassNotFoundException.class);
     assertThatThrownBy(() -> Class.forName(VALUE_META_GEOMETRY_CLASS, false, harnessLoader))
+        .isInstanceOf(ClassNotFoundException.class);
+    assertThatThrownBy(() -> Class.forName(PLANAR_IMAGE_CLASS, false, harnessLoader))
         .isInstanceOf(ClassNotFoundException.class);
 
     String previousPluginFolders = System.getProperty(Const.HOP_PLUGIN_BASE_FOLDERS);
@@ -88,17 +98,22 @@ class InstalledPluginClassLoaderTest {
       assertThat(wmtsServer.getClassLoader()).isSameAs(inspectorLoader);
       assertThat(wmtsParser.getClassLoader()).isSameAs(inspectorLoader);
       assertWmtsCapabilitiesParse(inspectorLoader, wmtsParser);
+      assertImagenRegistriesAreUnique(inspectorLoader);
 
       Class<?> valueMetaGeometry = geometryLoader.loadClass(VALUE_META_GEOMETRY_CLASS);
       Class<?> inspectorGui = inspectorLoader.loadClass(INSPECTOR_GUI_CLASS);
       Class<?> geometryFromGeometryLoader = geometryLoader.loadClass(JTS_GEOMETRY_CLASS);
       Class<?> geometryFromInspectorLoader = inspectorLoader.loadClass(JTS_GEOMETRY_CLASS);
+      Class<?> planarImageFromGeometryLoader = geometryLoader.loadClass(PLANAR_IMAGE_CLASS);
+      Class<?> planarImageFromInspectorLoader = inspectorLoader.loadClass(PLANAR_IMAGE_CLASS);
       Class<?> curveFromGeometryLoader = geometryLoader.loadClass(CIRCULAR_STRING_CLASS);
       Class<?> curveFromInspectorLoader = inspectorLoader.loadClass(CIRCULAR_STRING_CLASS);
 
       assertThat(valueMetaGeometry.getClassLoader()).isSameAs(geometryLoader);
       assertThat(inspectorGui.getClassLoader()).isSameAs(geometryLoader);
       assertThat(geometryFromInspectorLoader).isSameAs(geometryFromGeometryLoader);
+      assertThat(planarImageFromInspectorLoader).isSameAs(planarImageFromGeometryLoader);
+      assertThat(planarImageFromGeometryLoader.getClassLoader()).isSameAs(geometryLoader);
       assertThat(curveFromInspectorLoader).isSameAs(curveFromGeometryLoader);
       verifyGeometryCacheRoundTrip(inspectorLoader);
       verifyExamples(inspectorLoader);
@@ -110,6 +125,28 @@ class InstalledPluginClassLoaderTest {
         System.clearProperty(Const.HOP_PLUGIN_BASE_FOLDERS);
       } else {
         System.setProperty(Const.HOP_PLUGIN_BASE_FOLDERS, previousPluginFolders);
+      }
+    }
+  }
+
+  private void assertImagenRegistriesAreUnique(ClassLoader loader) throws Exception {
+    List<URL> resources =
+        java.util.Collections.list(loader.getResources("META-INF/registryFile.imagen"));
+    assertThat(resources).as("shared Imagen registry resources").isNotEmpty();
+    Set<String> registrations = new HashSet<>();
+    for (URL resource : resources) {
+      try (BufferedReader reader =
+          new BufferedReader(new InputStreamReader(resource.openStream(), StandardCharsets.UTF_8))) {
+        for (String line : reader.lines().collect(Collectors.toList())) {
+          String trimmed = line.trim();
+          if (trimmed.isEmpty() || trimmed.startsWith("#")) continue;
+          String[] fields = trimmed.split("\\s+");
+          if ((fields[0].equals("descriptor") || fields[0].equals("rendered"))
+              && !registrations.add(trimmed)) {
+            throw new AssertionError(
+                "Duplicate Imagen registration: " + trimmed + " from " + resource);
+          }
+        }
       }
     }
   }
