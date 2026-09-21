@@ -23,20 +23,40 @@ WKT/EWKT or WKB fields. Parsing failures do not remove the original row from the
 
 [.gui-mockup]
 ----
-+-----------------------------------------------------------------------+
-| Inspect data                                                          |
-| Sample size  [ 1000 / ALL ]    Mode [ FIRST / LAST / RANDOM ]           |
-| Timeout      [ seconds ]      Geometry field [ optional              ] |
-| Background   [ swisstopo Landeskarten (grau) ]                          |
-|                                                     [ Start ] [Cancel]|
-+-----------------------------------------------------------------------+
-| Choose streams to capture                                             |
-| [x] Source [0] OUTPUT MAIN                                             |
-| [ ] Filter [0] OUTPUT TARGET -> Passed                                 |
-| [ ] Filter [0] OUTPUT TARGET -> Rejected                               |
-| [ ] Target [0] INPUT MAIN -> Source                                    |
-|                                           [Capture selected streams]  |
-+-----------------------------------------------------------------------+
++----------------------------------------------------------------------------------+
+| Inspect data...                                                                  |
+|                                                                                  |
+| Initial stream selection   [ Auto                          v ]                   |
+| Geometry field             [ geometry                      v ]                   |
+| Capture mode               [ Sample                        v ]                   |
+| Sample size                [ 1000                          v ]                   |
+| Sampling mode              [ FIRST                         v ]                   |
+| Timeout (seconds)          [ 30                            v ]                   |
+| Background map: configured for ch.swisstopo.pixelkarte-grau (enabled by default) |
+| [ Background map settings... ]                                                   |
+|                                                                                  |
+|                          [ Cancel ]  [ Start ]                                   |
++----------------------------------------------------------------------------------+
+----
+
+*Start* opens the separate stream chooser. *Initial stream selection* determines
+the initial selection; confirm the streams to capture in this second dialog.
+
+[.gui-mockup]
+----
++-----------------------------------------------------------------------------+
+| Choose streams to capture                                                   |
+|                                                                             |
+| Select streams from this pipeline. Each stream is kept separately.          |
+| Main captures putRow; target captures explicit routing to that destination. |
+|                                                                             |
+| [x] Source [0] OUTPUT MAIN                                                  |
+| [ ] Filter [0] OUTPUT TARGET -> Passed                                      |
+| [ ] Filter [0] OUTPUT TARGET -> Rejected                                    |
+| [ ] Target [0] INPUT MAIN -> Source                                         |
+|                                                                             |
+| [ Capture selected streams ]  [ Cancel ]                                    |
++-----------------------------------------------------------------------------+
 ----
 
 The stream chooser is authoritative. Select more than one stream to capture several results in a
@@ -60,16 +80,37 @@ Further inspections in the same pipeline editor add layers to the existing works
 
 [.gui-mockup]
 ----
-+----------------------+----------------------------+-------------------+
-| Results              | Map                        | Selected row      |
-| [x] Source           |                            | Attributes        |
-| [x] Processed        | geometry overlays          | Geometry type     |
-| Colour / Opacity     | swisstopo background       | SRID / WKT        |
-| Up / Down / Remove   |----------------------------| Validity / status |
-| Replace when adding  | Search [      ] [Filter]   |                   |
-|                      | Rows: id | name | geometry |                   |
-+----------------------+----------------------------+-------------------+
++-------------------------------------------------------------------------------------+
+| Data Inspector                                                                      |
+|                                                                                     |
+| Geometry field: [ geometry v ]   Inspecting output rows                             |
+|        [Zoom in] [Zoom out] [Extent] [Refresh] [Emphasize] [Background]             |
+|                                                                                     |
+| +---------------------------+-----------------------------+-----------------------+ |
+| | [x] Source ...            | Map                         | No row selected       | |
+| | [x] Processed ...         |                             | Attribute | Value     | |
+| |                           | Geometry overlays           |                       | |
+| |                           | Background map              |                       | |
+| |                           |                             |                       | |
+| +---------------------------+-----------------------------+-----------------------+ |
+| |                           | Rows                        | Geometry (WKT/EWKT)   | |
+| |                           | [ Search captured rows ]    |                       | |
+| |                           | [ Filter... ]               |                       | |
+| | [ ] Replace active when   | Row | id | name | ...       |                       | |
+| |     adding                | 1   | 42 | Example          |                       | |
+| | [Colour...] [Opacity...]  | 2   | 43 | Another          |                       | |
+| | [Up]        [Down]        |                             |                       | |
+| | [Remove]                  |                             |                       | |
+| +---------------------------+-----------------------------+-----------------------+ |
+| source=output rows | sampled rows=100 | parsed features=100 | ...                   |
+| crs=EPSG:2056 | filtered rows=100 | overlay=idle | ... | background=ready           |
++-------------------------------------------------------------------------------------+
 ----
+
+Toolbar icons are represented by text above: *Extent* means *Zoom to extent*,
+*Refresh* means *Refresh geometry view*, *Emphasize* means *Emphasize small features*,
+and *Background* means *Toggle background map*. Layer labels and the status line
+are abbreviated. Selecting a row fills the attribute table and geometry text.
 
 === Table, filters and details
 
