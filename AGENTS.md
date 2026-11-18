@@ -63,8 +63,7 @@ mvn -U -B -ntp -pl integration-tests test -Dgeometry.inspector.plugins.dir="$PLU
 
 This tests installed plugin classloaders using Maven; it does not run a full Hop
 client or `hop-run` pipeline. The CI snapshot publish job depends on both verify
-and this installed test. The one-element `zip-descriptors` array still selects
-the shared schema-version 2 bundle path.
+and this installed test.
 
 ## Documentation and examples
 
