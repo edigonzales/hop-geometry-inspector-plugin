@@ -4,10 +4,7 @@
 
 Before changing pipelines or test setup, read the
 [shared CI contract](https://github.com/edigonzales/hop-plugin-ci/blob/main/docs/ci-contract.md).
-Also read the
-[plugin repository contract](https://github.com/edigonzales/hop-plugin-ci/blob/main/docs/plugin-repository-contract.md).
-The documentation follows `main`; use the interfaces at this repo's actual
-workflow/helper revisions and preserve existing pins and `ci-ref` values.
+Use the CI interfaces at the shared workflow pin.
 
 Run the commands below from this repository root in Bash, using Python 3, Maven
 and JDK 21 (`JAVA_HOME` and `PATH` pointing to that JDK). Compatibility jobs also
@@ -77,7 +74,7 @@ The English canonical handbook is `docs/inspector/data-inspector.adoc`; update i
 `examples/` and `e2e/expected/` alongside behavior changes. Developer details belong
 in `docs/development/architecture.adoc`, not the README.
 
-Run `python3 scripts/check-docs.py` and `python3 scripts/build-docs-site.py`.
+Run `python3 scripts/build-docs-site.py`.
 The latter builds working files locally; CI supplies `--revision "$GITHUB_SHA"`.
 Do not commit generated documentation, downloads, caches or test output.
 Run `scripts/run-e2e.py --help` for installed example checks using a disposable

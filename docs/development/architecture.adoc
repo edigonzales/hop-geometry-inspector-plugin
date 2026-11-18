@@ -31,8 +31,6 @@ User examples use standard Hop transforms; test fixtures and expected data live 
 
 == Documentation
 
-The common `hop-plugin-parent` enables doclint during Maven verify. Its transform rules do not cover
-GUI plugins; `scripts/check-docs.py` validates the Inspector handbook and example XML separately.
 `python3 scripts/build-docs-site.py --serve` builds the working tree. CI passes `--revision` for the
 exact checked-out commit. Site validation checks local links, anchors, downloads and search entries.
 
