@@ -45,7 +45,6 @@ from OSGeo. Snapshot dependencies resolve from `https://jars.interlis.guru/snaps
 ```bash
 mvn clean verify
 python3 scripts/verify-package.py
-python3 scripts/check-docs.py
 python3 scripts/build-docs-site.py
 ```
 
@@ -68,8 +67,7 @@ runtime classloader, not duplicated in the Inspector ZIP.
 The [shared CI contract](https://github.com/edigonzales/hop-plugin-ci/blob/main/docs/ci-contract.md)
 verifies Java 21/25 compatibility on Linux, macOS and Windows. Ubuntu/Java 21 creates
 the canonical ZIP. Package and installed-classloader checks gate snapshot publication;
-publication never rebuilds the candidate. Existing workflow references and `ci-ref`
-values are preserved. Pull requests do not publish artifacts.
+publication uses the candidate from the same run. Workflow references are pinned to a commit. Pull requests do not publish artifacts.
 
 Documentation builds the exact checkout in a separate workflow. `main` deploys to
 GitHub Pages; the repository's Pages source must be set to **GitHub Actions**.

@@ -79,7 +79,7 @@ jobs:
           cache: maven
 
       - name: Download verified Inspector bundle
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: hop-geometry-inspector-plugin-canonical
           path: .ci/inspector
@@ -113,16 +113,10 @@ jobs:
   publish:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: [verify, installed-e2e]
-    uses: edigonzales/hop-plugin-ci/.github/workflows/plugin-publish.yml@main
+    uses: edigonzales/hop-plugin-ci/.github/workflows/publish.yml@f0a1eec368cb8c5d2592086b26393a6fc3916ad1
     with:
-      ci-ref: main
       repository-kind: snapshot
       verified-artifact-name: hop-geometry-inspector-plugin-canonical
-      pom-file: pom.xml
-      zip-descriptors: >-
-        [{"artifactId":"hop-geometry-inspector-plugin","zipGlob":"assemblies/assemblies-hop-geometry-inspector/target/hop-geometry-inspector-plugin-*.zip","pluginRoot":"plugins/misc/hop-geometry-inspector"}]
-      group-id: ch.so.agi
-      hop-version: 2.19.0
     secrets:
       MAVEN_USERNAME: ${{ secrets.INTERLIS_MAVEN_USERNAME }}
       MAVEN_PASSWORD: ${{ secrets.INTERLIS_MAVEN_TOKEN }}
