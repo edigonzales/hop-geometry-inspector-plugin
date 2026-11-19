@@ -59,7 +59,6 @@ def check(root):
     assert handbook in pages, 'Missing single-page handbook'
     for anchor in HANDBOOK_ANCHORS:
         assert anchor in pages[handbook].ids, 'Missing section: ' + anchor
-        'Missing gui-mockup styles'
     downloads = list(root.rglob('*.hpl'))
     assert len(downloads) == HPL_DOWNLOADS, f'Expected {HPL_DOWNLOADS} pipeline downloads, got {len(downloads)}'
     search = list(root.rglob('*search*.json'))
