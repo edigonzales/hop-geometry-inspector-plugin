@@ -74,13 +74,13 @@ public final class ReplayPlanner {
       if (!execute.contains(start) || !execute.contains(end))
         throw new IllegalArgumentException("No path between selected transforms");
     }
-    Map<String, List<InspectionResult>> replacements = new LinkedHashMap<>();
+    Map<String, InspectionResult> replacements = new LinkedHashMap<>();
     if (mode == Mode.TO) {
       for (String name : new ArrayList<>(execute))
         if (!name.equals(start)) {
-          List<InspectionResult> valid = validCaches(source, name, caches, variables, provider);
-          if (!valid.isEmpty()) {
-            replacements.put(name, valid);
+          var valid = validCache(source, name, caches, variables, provider);
+          if (valid.isPresent()) {
+            replacements.put(name, valid.get());
             execute.remove(name);
           }
         }
@@ -105,13 +105,14 @@ public final class ReplayPlanner {
           && !execute.contains(hop.getFromTransform().getName()))
         boundary.add(hop.getFromTransform().getName());
     for (String name : boundary) {
-      var valid = validCaches(source, name, caches, variables, provider);
+      if (replacements.containsKey(name)) continue;
+      var valid = validCache(source, name, caches, variables, provider);
       if (valid.isEmpty())
         throw new IllegalArgumentException(
             "Missing complete current cache for "
                 + name
                 + ". Record the OUTPUT MAIN stream with a complete disk cache first.");
-      replacements.put(name, valid);
+      replacements.put(name, valid.get());
     }
     for (String name : execute) {
       TransformMeta transform = source.findTransform(name);
@@ -125,18 +126,19 @@ public final class ReplayPlanner {
                 + transform.getTransformPluginId()
                 + "). Inspect it directly or choose a replay boundary that excludes it.");
     }
-    List<InspectionResult> inputs = replacements.values().stream().flatMap(List::stream).toList();
+    List<InspectionResult> inputs = List.copyOf(replacements.values());
     if (inputs.stream().map(InspectionResult::generation).distinct().count() > 1)
       throw new IllegalArgumentException(
           "All replay inputs must belong to the same capture generation");
     for (var input : inputs)
       for (long ordinal = 0; ordinal < input.rows().size(); ordinal++) input.rows().row(ordinal);
     PipelineMeta clone = CaptureService.prune(source, variables, provider, execute);
+    var ancestors = CaptureService.ancestors(source, execute);
     for (var transform : new ArrayList<>(clone.getTransforms()))
       if (!execute.contains(transform.getName())
           && !replacements.containsKey(transform.getName())) {
         // Retain outgoing dummy sinks, remove excluded ancestors.
-        if (CaptureService.ancestors(source, execute).contains(transform.getName()))
+        if (ancestors.contains(transform.getName()))
           clone.removeTransform(clone.getTransforms().indexOf(transform));
       }
     for (var entry : replacements.entrySet()) {
@@ -158,36 +160,37 @@ public final class ReplayPlanner {
     return new Plan(clone, Collections.unmodifiableSet(execute), inputs, mode);
   }
 
-  private List<InspectionResult> validCaches(
+  private Optional<InspectionResult> validCache(
       PipelineMeta source,
       String name,
       List<InspectionResult> candidates,
       IVariables variables,
       IHopMetadataProvider provider)
       throws Exception {
-    String fingerprint = CacheFingerprint.of(source, name, variables, provider);
-    var valid =
+    // Directed and error outputs are inspectable but do not represent a complete source.
+    var main =
         candidates.stream()
             .filter(
                 r ->
                     r.stream().transform().equals(name)
                         && r.stream().direction() == StreamDescriptor.Direction.OUTPUT
+                        && r.stream().kind() == StreamDescriptor.Kind.MAIN
                         && r.stream().copy() == 0
-                        && r.replayable(fingerprint))
+                        && !r.sample()
+                        && r.completion() == InspectionResult.Completion.COMPLETE)
             .toList();
-    // First replay version requires a complete logical main stream. Directed/error boundaries
-    // remain inspectable, but cannot silently substitute an incomplete set of source outputs.
-    var main =
-        valid.stream().filter(r -> r.stream().kind() == StreamDescriptor.Kind.MAIN).findFirst();
-    if (main.isEmpty()) return List.of();
+    if (main.isEmpty()) return Optional.empty();
+    String fingerprint = CacheFingerprint.of(source, name, variables, provider);
+    var matching = main.stream().filter(r -> r.replayable(fingerprint)).findFirst();
+    if (matching.isEmpty()) return Optional.empty();
     var transform = source.findTransform(name);
     if (transform.isPartitioned()
         || transform.getCopies(variables) != 1
         || transform.isDoingErrorHandling()
         || !transform.getTransform().getTransformIOMeta().getTargetStreams().isEmpty())
-      return List.of();
+      return Optional.empty();
     var expected = source.getTransformFields(variables, transform);
-    var actual = main.get().rows().rowMeta();
+    var actual = matching.get().rows().rowMeta();
     if (expected != null && expected.size() > 0) {
       if (actual == null || expected.size() != actual.size())
         throw new IllegalArgumentException("Incompatible cache schema for " + name);
@@ -197,7 +200,7 @@ public final class ReplayPlanner {
             || expected.getValueMeta(i).getStorageType() != actual.getValueMeta(i).getStorageType())
           throw new IllegalArgumentException("Incompatible cache field for " + name);
     }
-    return List.of(main.get());
+    return matching;
   }
 
   private static Set<String> descendants(PipelineMeta p, String start) {

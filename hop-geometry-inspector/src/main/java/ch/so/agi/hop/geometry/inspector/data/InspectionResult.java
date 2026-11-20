@@ -24,6 +24,4 @@ public record InspectionResult(
   public boolean replayable(String currentFingerprint) {
     return !sample && completion == Completion.COMPLETE && fingerprint.equals(currentFingerprint);
   }
-
-  public record RowId(UUID result, long ordinal) {}
 }

@@ -1,6 +1,5 @@
 package ch.so.agi.hop.geometry.inspector.data;
 
-import java.util.List;
 import org.apache.hop.core.exception.*;
 import org.apache.hop.core.row.IRowMeta;
 import org.apache.hop.core.variables.IVariables;
@@ -11,10 +10,10 @@ import org.apache.hop.pipeline.transform.*;
 /** Internal, in-memory-only replacement; never serialized into the user's pipeline. */
 public final class ReplaySourceMeta
     extends BaseTransformMeta<ReplaySourceMeta.Source, ReplaySourceMeta.Data> {
-  final List<InspectionResult> inputs;
+  private final RowStore rows;
 
-  public ReplaySourceMeta(List<InspectionResult> inputs) {
-    this.inputs = List.copyOf(inputs);
+  public ReplaySourceMeta(InspectionResult input) {
+    rows = input.rows();
   }
 
   @Override
@@ -31,15 +30,13 @@ public final class ReplaySourceMeta
       IVariables variables,
       IHopMetadataProvider provider) {
     row.clear();
-    if (!inputs.isEmpty() && inputs.getFirst().rows().rowMeta() != null)
-      row.addRowMeta(inputs.getFirst().rows().rowMeta().clone());
+    if (rows.rowMeta() != null) row.addRowMeta(rows.rowMeta().clone());
   }
 
   public static final class Data extends BaseTransformData {}
 
   public static final class Source extends BaseTransform<ReplaySourceMeta, Data> {
     private long ordinal;
-    private int input;
 
     public Source(
         TransformMeta transform,
@@ -53,15 +50,9 @@ public final class ReplaySourceMeta
 
     @Override
     public boolean processRow() throws HopException {
-      while (input < meta.inputs.size()) {
-        var result = meta.inputs.get(input);
-        if (ordinal >= result.rows().size()) {
-          input++;
-          ordinal = 0;
-          continue;
-        }
+      if (ordinal < meta.rows.size()) {
         try {
-          putRow(result.rows().rowMeta(), result.rows().row(ordinal++));
+          putRow(meta.rows.rowMeta(), meta.rows.row(ordinal++));
           return true;
         } catch (Exception e) {
           throw new HopException("Unable to replay cached row", e);

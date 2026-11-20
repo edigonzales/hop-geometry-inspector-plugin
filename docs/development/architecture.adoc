@@ -11,7 +11,9 @@ capture generation and completeness separate from its `RowStore`.
 index. `CacheRepository` manages manifests, reader leases, budgets and cleanup. `QueryIndex` uses
 bounded chunks and two-way external merges, with capture ordinal as the stable tie-breaker.
 
-`ReplayPlanner` validates the graph and cache inputs before preparing an engine. Internal
+Capture fingerprints are computed for disk recordings, once per recorded transform. Replay
+checks the configuration fingerprint, schema and row integrity of the selected boundary cache.
+`ReplayPlanner` validates the graph and capture generation before preparing an engine. Internal
 `ReplaySourceMeta` instances are only placed in the execution clone and are never saved into the
 user pipeline. The original upstream source is not initialized when replaced by a cache source.
 
