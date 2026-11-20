@@ -2,11 +2,18 @@ package ch.so.agi.hop.geometry.inspector.data;
 
 import static org.assertj.core.api.Assertions.*;
 
+import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicLong;
 import org.apache.hop.core.HopEnvironment;
 import org.apache.hop.core.row.RowMeta;
 import org.apache.hop.core.row.value.*;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class DiskRowStoreTest {
 
@@ -54,6 +61,53 @@ class DiskRowStoreTest {
       assertThat(rows.size()).isEqualTo(1);
       assertThat(rows.row(0)).containsExactly(1L, "ok");
     }
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void closeReleasesHandlesAndReservationEvenIfDirectoryDeletionFails(boolean blockDeletion)
+      throws Exception {
+    var rows = new DiskRowStore(schema(), 4096);
+    var directory = (Path) field(rows, "directory");
+    var leftover = directory.resolve("leftover");
+    try (rows) {
+      var data = ((RandomAccessFile) field(rows, "data")).getChannel();
+      var index = ((RandomAccessFile) field(rows, "index")).getChannel();
+      var reserved = (AtomicLong) field(rows, "TEMP_BYTES");
+      long before = reserved.get();
+      rows.append(new Object[] {1L, "ok"});
+      assertThat(reserved.get()).isGreaterThan(before);
+
+      if (blockDeletion) {
+        Files.createFile(leftover);
+        assertThatThrownBy(rows::close).isInstanceOf(IOException.class);
+        assertThat(leftover).exists();
+      } else {
+        rows.close();
+        assertThat(directory).doesNotExist();
+      }
+
+      assertThat(data.isOpen()).isFalse();
+      assertThat(index.isOpen()).isFalse();
+      assertThat(reserved.get()).isEqualTo(before);
+      assertThatThrownBy(() -> rows.row(0))
+          .isInstanceOf(IOException.class)
+          .hasMessage("Inspection rows are closed");
+      assertThatThrownBy(() -> rows.append(new Object[] {2L, "closed"}))
+          .isInstanceOf(IOException.class)
+          .hasMessage("Inspection rows are closed");
+      rows.close();
+      assertThat(reserved.get()).isEqualTo(before);
+    } finally {
+      Files.deleteIfExists(leftover);
+      Files.deleteIfExists(directory);
+    }
+  }
+
+  private static Object field(DiskRowStore rows, String name) throws ReflectiveOperationException {
+    var field = DiskRowStore.class.getDeclaredField(name);
+    field.setAccessible(true);
+    return field.get(rows);
   }
 
   @Test

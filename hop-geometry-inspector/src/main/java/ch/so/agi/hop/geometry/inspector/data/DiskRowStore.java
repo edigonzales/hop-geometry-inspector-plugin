@@ -118,6 +118,7 @@ final class DiskRowStore implements RowStore {
   @Override
   public synchronized Object[] row(long ordinal) throws IOException {
     if (ordinal < 0 || ordinal >= count) throw new IndexOutOfBoundsException();
+    if (closed) throw new IOException("Inspection rows are closed");
     index.seek(ordinal * INDEX_BYTES);
     long offset = index.readLong();
     long length = index.readLong();
@@ -157,11 +158,12 @@ final class DiskRowStore implements RowStore {
   @Override
   public synchronized void close() throws IOException {
     if (closed) return;
-    try (var rowFile = data;
+    try (Closeable cleanup = this::deleteFiles;
+        var rowFile = data;
         var indexFile = index) {
-      // Close both handles before deleting on Windows.
+      // Resources close in reverse order so both handles close before deletion on Windows.
     } finally {
-      deleteFiles();
+      // Release the active-store reservation even if files could not be deleted.
       TEMP_BYTES.addAndGet(-bytes);
       closed = true;
     }
