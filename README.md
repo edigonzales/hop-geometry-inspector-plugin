@@ -1,14 +1,15 @@
 # hop-geometry-inspector-plugin
 
 **Data Inspector** for Apache Hop 2.19 Desktop. Right-click a transform and choose
-**Inspect data...** to inspect an isolated pipeline run.
+**Inspect data...** to sample or capture selected streams. Capture runs the selected
+transforms and required upstream transforms again and can repeat writes and other side effects.
 
 ## Features
 
 - Complete row tables, typed sorting, search, field filters and geometry details.
 - Multiple result layers with linked map/table selection; no reprojection.
-- Explicit stream sampling (FIRST/LAST/RANDOM) and persistent binary caches.
-- Conservative cache replay with a preview of the transforms to execute.
+- Multiple input, main, target and error streams in one capture.
+- FIRST, LAST and RANDOM samples in memory or all rows in temporary files.
 - SWT/GeoTools map with the swisstopo grey pixel map as its default WMTS background.
 
 ## Requirements
@@ -54,7 +55,7 @@ That convenience script skips tests; it does not replace verification.
 
 ## Modules and artifacts
 
-- `hop-geometry-inspector`: GUI, capture, row stores and replay.
+- `hop-geometry-inspector`: GUI, capture and session-owned row stores.
 - `assemblies/assemblies-hop-geometry-inspector`: install ZIP under `target/`.
 - `integration-tests`: tests against installed, canonical plugin ZIPs.
 - `examples`: directly openable user pipelines; `e2e`: automated expectations.

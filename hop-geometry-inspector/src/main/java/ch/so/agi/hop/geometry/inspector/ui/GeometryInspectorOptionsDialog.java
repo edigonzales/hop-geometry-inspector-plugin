@@ -20,8 +20,6 @@ import org.eclipse.swt.widgets.Shell;
 
 public class GeometryInspectorOptionsDialog {
 
-  static final String SAMPLE_SIZE_ALL_LABEL = "ALL";
-
   private final Shell parent;
   private final List<GeometryFieldCandidate> outputCandidates;
   private final List<GeometryFieldCandidate> inputCandidates;
@@ -39,10 +37,6 @@ public class GeometryInspectorOptionsDialog {
   }
 
   public GeometryInspectorOptions open() {
-    return open(false);
-  }
-
-  public GeometryInspectorOptions open(boolean completeCacheDefault) {
     Shell shell = new Shell(parent, SWT.DIALOG_TRIM | SWT.APPLICATION_MODAL | SWT.RESIZE);
     shell.setText("Inspect data...");
     shell.setLayout(new GridLayout(2, false));
@@ -69,14 +63,14 @@ public class GeometryInspectorOptionsDialog {
 
     new Label(shell, SWT.NONE).setText("Capture mode");
     Combo captureMode = new Combo(shell, SWT.READ_ONLY);
-    captureMode.setItems("Sample", "Record complete disk cache");
-    captureMode.select(completeCacheDefault ? 1 : 0);
+    captureMode.setItems("Sample", "All rows (temporary)");
+    captureMode.select(0);
     Label sampleSizeLabel = new Label(shell, SWT.NONE);
     sampleSizeLabel.setText("Sample size");
 
     Combo sampleSizeCombo = new Combo(shell, SWT.DROP_DOWN);
     sampleSizeCombo.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-    sampleSizeCombo.setItems(new String[] {"50", "200", "1000", SAMPLE_SIZE_ALL_LABEL});
+    sampleSizeCombo.setItems(new String[] {"50", "200", "1000"});
     sampleSizeCombo.setText("1000");
 
     Label samplingModeLabel = new Label(shell, SWT.NONE);
@@ -97,9 +91,6 @@ public class GeometryInspectorOptionsDialog {
           sampleSizeCombo.setEnabled(sample);
           samplingModeCombo.setEnabled(sample);
         });
-    boolean sample = captureMode.getSelectionIndex() == 0;
-    sampleSizeCombo.setEnabled(sample);
-    samplingModeCombo.setEnabled(sample);
     Label timeoutLabel = new Label(shell, SWT.NONE);
     timeoutLabel.setText("Timeout (seconds)");
 
@@ -124,7 +115,7 @@ public class GeometryInspectorOptionsDialog {
     cancelButton.setLayoutData(new GridData(SWT.RIGHT, SWT.CENTER, true, false));
 
     Button startButton = new Button(shell, SWT.PUSH);
-    startButton.setText("Start");
+    startButton.setText("Choose streams...");
     startButton.setLayoutData(new GridData(SWT.LEFT, SWT.CENTER, false, false));
 
     final GeometryInspectorOptions[] result = new GeometryInspectorOptions[1];
@@ -156,7 +147,7 @@ public class GeometryInspectorOptionsDialog {
           try {
             int sampleSize =
                 captureMode.getSelectionIndex() == 1
-                    ? Integer.MAX_VALUE
+                    ? 0
                     : parseSampleSize(sampleSizeCombo.getText());
             int timeoutSeconds = Integer.parseInt(timeoutCombo.getText().trim());
             SamplingMode mode = SamplingMode.fromLabel(samplingModeCombo.getText());
@@ -175,8 +166,7 @@ public class GeometryInspectorOptionsDialog {
           } catch (Exception e) {
             MessageBox messageBox = new MessageBox(shell, SWT.ICON_WARNING | SWT.OK);
             messageBox.setText("Invalid options");
-            messageBox.setMessage(
-                "Please provide a valid sample size (number or ALL), timeout, and geometry field.");
+            messageBox.setMessage("Enter a positive sample size and timeout in seconds.");
             messageBox.open();
           }
         });
@@ -255,9 +245,6 @@ public class GeometryInspectorOptionsDialog {
     String trimmed = value.trim();
     if (trimmed.isEmpty()) {
       throw new IllegalArgumentException("sample size must not be blank");
-    }
-    if (SAMPLE_SIZE_ALL_LABEL.equalsIgnoreCase(trimmed)) {
-      return Integer.MAX_VALUE;
     }
     int sampleSize = Integer.parseInt(trimmed);
     if (sampleSize <= 0) {

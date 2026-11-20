@@ -61,9 +61,20 @@ PLUGINS_DIR="$INSPECTOR_TEST_ROOT/plugins"
 mvn -U -B -ntp -pl integration-tests test -Dgeometry.inspector.plugins.dir="$PLUGINS_DIR"
 ```
 
-This tests installed plugin classloaders using Maven; it does not run a full Hop
-client or `hop-run` pipeline. The CI snapshot publish job depends on both verify
-and this installed test.
+On a desktop, also pass `-DgeometryInspector.swtSmoke=true` to the build and
+the installed test to exercise the SWT dialogs and the installed viewer. The
+installed viewer test checks row selection outside the map window and file
+cleanup when a layer or the viewer closes.
+
+Run the full-stream regression with a capped heap:
+
+```bash
+mvn -s "$MAVEN_SETTINGS" -pl hop-geometry-inspector -Dui.test.argLine=-Xmx128m \
+  -Dtest='CaptureServiceTest#inspectsAFullStreamLargerThanTheHeapWithoutMaterializingRows' test
+```
+
+The CI snapshot publish job depends on verification and the installed example
+checks.
 
 ## Documentation and examples
 

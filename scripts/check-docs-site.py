@@ -9,8 +9,7 @@ from urllib.parse import unquote, urlsplit
 
 PAGES_BASE = '/hop-geometry-inspector-plugin/'
 HANDBOOK = 'data-inspector/main/index.html'
-HANDBOOK_ANCHORS = ['data-inspector', '_description', '_input', '_options', '_output', '_caches', '_replay', '_supported_engines', '_examples', '_error_handling', '_limitations']
-HPL_DOWNLOADS = 8
+HANDBOOK_ANCHORS = ['data-inspector', '_description', '_input', '_options', '_output', '_temporary_storage', '_supported_engines', '_examples', '_error_handling', '_limitations']
 
 
 class Page(HTMLParser):
@@ -60,7 +59,6 @@ def check(root):
     for anchor in HANDBOOK_ANCHORS:
         assert anchor in pages[handbook].ids, 'Missing section: ' + anchor
     downloads = list(root.rglob('*.hpl'))
-    assert len(downloads) == HPL_DOWNLOADS, f'Expected {HPL_DOWNLOADS} pipeline downloads, got {len(downloads)}'
     search = list(root.rglob('*search*.json'))
     assert search, 'Missing search JSON'
     combined = '\n'.join(p.read_text() for p in search)

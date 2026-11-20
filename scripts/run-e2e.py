@@ -37,7 +37,7 @@ def main():
     # full application's library classpath, which this Maven harness intentionally lacks.
     with tempfile.TemporaryDirectory(prefix='inspector-installed-') as temporary:
         plugins = Path(temporary) / 'plugins'
-        for name in ('datagrid', 'filterrows', 'selectvalues', 'mergejoin'):
+        for name in ('datagrid', 'filterrows', 'selectvalues'):
             shutil.copytree(home / 'plugins/transforms' / name, plugins / 'transforms' / name)
         for name in ('hop-geometry-type', 'hop-geometry-inspector'):
             shutil.copytree(home / 'plugins/misc' / name, plugins / 'misc' / name)

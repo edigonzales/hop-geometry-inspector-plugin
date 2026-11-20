@@ -14,7 +14,16 @@ public final class QueryIndex implements AutoCloseable {
   private QueryIndex(Path directory, Path file) throws IOException {
     this.directory = directory;
     index = new RandomAccessFile(file.toFile(), "r");
-    positions = new RandomAccessFile(directory.resolve("positions.idx").toFile(), "r");
+    try {
+      positions = new RandomAccessFile(directory.resolve("positions.idx").toFile(), "r");
+    } catch (IOException error) {
+      try {
+        index.close();
+      } catch (IOException cleanup) {
+        error.addSuppressed(cleanup);
+      }
+      throw error;
+    }
   }
 
   public long size() throws IOException {
@@ -35,6 +44,7 @@ public final class QueryIndex implements AutoCloseable {
 
   public static QueryIndex build(RowStore rows, RowQuery query, BooleanSupplier cancelled)
       throws IOException {
+    check(cancelled);
     Path dir = Files.createTempDirectory("data-inspector-query-");
     List<Path> runs = new ArrayList<>();
     Comparator<Long> comparator =
@@ -103,9 +113,14 @@ public final class QueryIndex implements AutoCloseable {
         }
       }
       return new QueryIndex(dir, runs.getFirst());
-    } catch (Exception e) {
-      remove(dir);
+    } catch (Exception | Error e) {
+      try {
+        remove(dir);
+      } catch (IOException cleanup) {
+        e.addSuppressed(cleanup);
+      }
       if (e instanceof IOException io) throw io;
+      if (e instanceof Error error) throw error;
       throw new IOException("Query failed", e);
     }
   }

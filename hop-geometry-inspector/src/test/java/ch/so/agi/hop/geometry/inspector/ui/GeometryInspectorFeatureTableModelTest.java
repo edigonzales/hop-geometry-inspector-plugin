@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.so.agi.hop.geometry.inspector.GeometryFeatureBuilder;
 import ch.so.agi.hop.geometry.inspector.model.GeometryBuildResult;
-import ch.so.agi.hop.geometry.inspector.model.GeometryInspectionSide;
 import ch.so.agi.hop.geometry.inspector.model.SamplingResult;
 import java.util.List;
 import org.apache.hop.core.row.RowMeta;
@@ -195,14 +194,6 @@ class GeometryInspectorFeatureTableModelTest {
   }
 
   private SamplingResult samplingResult(List<Object[]> rows, RowMeta rowMeta) {
-    return new SamplingResult(
-        rows,
-        rowMeta,
-        false,
-        "",
-        GeometryInspectionSide.AUTO,
-        GeometryInspectionSide.OUTPUT,
-        false,
-        "");
+    return new SamplingResult(rows, rowMeta, false, "", "OUTPUT MAIN");
   }
 }

@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.so.agi.hop.geometry.inspector.GeometryFeatureBuilder;
 import ch.so.agi.hop.geometry.inspector.model.*;
+import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import org.apache.hop.core.row.RowMeta;
 import org.apache.hop.core.row.value.*;
 import org.eclipse.swt.SWT;
@@ -14,6 +16,76 @@ import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
 @EnabledIfSystemProperty(named = "geometryInspector.swtSmoke", matches = "true")
 class DataInspectorSmokeTest {
+  @Test
+  void captureOptionsOfferOneFullStreamChoice() {
+    Display display = Display.getCurrent();
+    boolean owns = display == null;
+    if (owns) display = new Display();
+    Shell parent = new Shell(display);
+    var settings =
+        new ch.so.agi.hop.geometry.inspector.BackgroundMapTestSettings(
+            GeometryInspectorBackgroundMapConfig.empty());
+    var failure = new AtomicReference<Throwable>();
+    Display ui = display;
+    try {
+      display.asyncExec(
+          () -> {
+            Shell dialog =
+                Arrays.stream(ui.getShells())
+                    .filter(shell -> shell.getText().equals("Inspect data..."))
+                    .findFirst()
+                    .orElse(null);
+            try {
+              assertThat(dialog).isNotNull();
+              var combos =
+                  Arrays.stream(dialog.getChildren())
+                      .filter(Combo.class::isInstance)
+                      .map(Combo.class::cast)
+                      .toList();
+              var capture =
+                  combos.stream()
+                      .filter(combo -> combo.getText().equals("Sample"))
+                      .findFirst()
+                      .orElseThrow();
+              var size =
+                  combos.stream()
+                      .filter(combo -> combo.getText().equals("1000"))
+                      .findFirst()
+                      .orElseThrow();
+              var mode =
+                  combos.stream()
+                      .filter(combo -> combo.getText().equals("FIRST"))
+                      .findFirst()
+                      .orElseThrow();
+              assertThat(capture.getItems()).containsExactly("Sample", "All rows (temporary)");
+              assertThat(size.getItems()).containsExactly("50", "200", "1000");
+              assertThat(size.isEnabled() && mode.isEnabled()).isTrue();
+              capture.select(1);
+              capture.notifyListeners(SWT.Selection, new Event());
+              assertThat(size.isEnabled() || mode.isEnabled()).isFalse();
+              capture.select(0);
+              capture.notifyListeners(SWT.Selection, new Event());
+              assertThat(size.isEnabled() && mode.isEnabled()).isTrue();
+              size.setText("invalid");
+              capture.select(1);
+              capture.notifyListeners(SWT.Selection, new Event());
+              dialog.getDefaultButton().notifyListeners(SWT.Selection, new Event());
+            } catch (Throwable error) {
+              failure.set(error);
+              if (dialog != null) dialog.dispose();
+            }
+          });
+      var options =
+          new GeometryInspectorOptionsDialog(parent, List.of(), List.of(), settings).open();
+      assertThat(failure.get()).isNull();
+      assertThat(options).isNotNull();
+      assertThat(options.allRows()).isTrue();
+    } finally {
+      parent.dispose();
+      if (owns) display.dispose();
+    }
+  }
+
   @Test
   void rowsWithoutGeometryAndIndependentLayerSelection() throws Exception {
     Display display = Display.getCurrent();
@@ -34,10 +106,7 @@ class DataInspectorSmokeTest {
               meta,
               false,
               "Complete",
-              GeometryInspectionSide.OUTPUT,
-              GeometryInspectionSide.OUTPUT,
-              false,
-              "");
+              "OUTPUT MAIN");
       var builder = new GeometryFeatureBuilder();
       var build = builder.build(meta, sample.rows(), "geometry");
       viewer =
@@ -74,13 +143,10 @@ class DataInspectorSmokeTest {
               meta,
               false,
               "Complete",
-              GeometryInspectionSide.OUTPUT,
-              GeometryInspectionSide.OUTPUT,
-              false,
-              "");
+              "OUTPUT MAIN");
       var overlapBuild = builder.build(meta, overlapping.rows(), "geometry");
       viewer.addResult(
-          overlapping, List.of("geometry"), "geometry", overlapBuild, "Overlapping result", false);
+          overlapping, List.of("geometry"), "geometry", overlapBuild, "Overlapping result");
       var select =
           viewer
               .getClass()
@@ -100,12 +166,9 @@ class DataInspectorSmokeTest {
               business,
               false,
               "Complete",
-              GeometryInspectionSide.OUTPUT,
-              GeometryInspectionSide.OUTPUT,
-              false,
-              "");
+              "OUTPUT MAIN");
       viewer.addResult(
-          other, List.of(), "", builder.build(business, other.rows(), ""), "Business rows", false);
+          other, List.of(), "", builder.build(business, other.rows(), ""), "Business rows");
       pump(display);
       assertThat(table.getItemCount()).isEqualTo(1);
       Table layers = (Table) field(viewer, "layerTable");
@@ -118,8 +181,7 @@ class DataInspectorSmokeTest {
       assertThat(table.getItemCount()).isEqualTo(3);
       Shell shell = (Shell) field(viewer, "shell");
       Label status = (Label) field(viewer, "statusLabel");
-      var updateStatus =
-          viewer.getClass().getDeclaredMethod("updateStatusLabel");
+      var updateStatus = viewer.getClass().getDeclaredMethod("updateStatusLabel");
       updateStatus.setAccessible(true);
       String statusText = status.getText();
       var shellSize = shell.getSize();
