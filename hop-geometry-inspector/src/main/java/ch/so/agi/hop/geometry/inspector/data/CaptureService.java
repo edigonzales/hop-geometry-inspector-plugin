@@ -161,8 +161,16 @@ public final class CaptureService {
     InspectionResult.Completion completion = InspectionResult.Completion.COMPLETE;
     String reason = "Natural completion";
     try {
+      Map<String, String> fingerprints = new HashMap<>();
       for (var stream : selected) {
-        String fingerprint = CacheFingerprint.of(source, stream.transform(), variables, provider);
+        String fingerprint = "";
+        if (disk) {
+          fingerprint = fingerprints.get(stream.transform());
+          if (fingerprint == null) {
+            fingerprint = CacheFingerprint.of(source, stream.transform(), variables, provider);
+            fingerprints.put(stream.transform(), fingerprint);
+          }
+        }
         collectors.put(
             stream,
             new Collector(

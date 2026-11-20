@@ -293,10 +293,8 @@ public class GeometryInspectorGuiPlugin {
                                   options,
                                   caches,
                                   cancelled::get);
-                      for (var result : results) {
-                        caches.recordParents(result.id(), plan.inputs());
+                      for (var result : results)
                         showResult(context, result, settingsService.loadBackgroundMapConfig());
-                      }
                     } catch (Exception error) {
                       Display.getDefault()
                           .asyncExec(

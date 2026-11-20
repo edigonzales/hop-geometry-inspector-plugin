@@ -166,24 +166,6 @@ public final class CacheRepository {
     }
   }
 
-  public synchronized void recordParents(UUID id, List<InspectionResult> parents)
-      throws IOException {
-    Path directory = root.resolve(id.toString());
-    Properties manifest = read(directory);
-    manifest.setProperty(
-        "parentCaches",
-        parents.stream()
-            .map(result -> result.id().toString())
-            .collect(java.util.stream.Collectors.joining(",")));
-    manifest.setProperty(
-        "parentGenerations",
-        parents.stream()
-            .map(result -> result.generation().toString())
-            .distinct()
-            .collect(java.util.stream.Collectors.joining(",")));
-    write(directory, manifest);
-  }
-
   public synchronized void delete(UUID id) throws IOException {
     if (leased.containsKey(id)) throw new IOException("Cache is in use");
     Path path = root.resolve(id.toString());

@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import javax.tools.JavaCompiler;
 import javax.tools.ToolProvider;
+import org.apache.hop.core.HopEnvironment;
 import org.apache.hop.core.gui.plugin.GuiPluginType;
 import org.apache.hop.core.plugins.IPlugin;
 import org.apache.hop.core.plugins.IPluginType;
@@ -31,6 +32,7 @@ class GeometryInspectorClassLoaderBootstrapTest {
 
   @Test
   void inspectorJoinsGeometryOwnedClassLoaderBeforeItsClassesAreLoaded() throws Exception {
+    boolean wasInitialized = HopEnvironment.isInitialized();
     PluginRegistry registry = PluginRegistry.getInstance();
     registry.reset();
 
@@ -100,7 +102,8 @@ class GeometryInspectorClassLoaderBootstrapTest {
       assertThat(planarImageFromInspector).isSameAs(planarImageFromGeometryPlugin);
       assertThat(planarImageFromInspector.getClassLoader()).isSameAs(geometryLoader);
     } finally {
-      registry.reset();
+      HopEnvironment.reset();
+      if (wasInitialized) HopEnvironment.init();
     }
   }
 
