@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.so.agi.hop.geometry.inspector.GeometryFeatureBuilder;
 import ch.so.agi.hop.geometry.inspector.model.GeometryBuildResult;
-import ch.so.agi.hop.geometry.inspector.model.GeometryInspectionSide;
 import ch.so.agi.hop.geometry.inspector.model.SamplingResult;
 import java.util.List;
 import org.apache.hop.core.row.RowMeta;
@@ -108,10 +107,7 @@ class GeometryInspectorSwtViewerPopupStateTest {
         GeometryInspectorSwtViewer.formatFeatureTableSelectionForClipboard(model, new int[] {1, 0});
 
     assertThat(clipboardContent)
-        .isEqualTo(
-            "0\talpha\tPOINT (1 2)"
-                + System.lineSeparator()
-                + "1\tbeta\tPOINT (3 4)");
+        .isEqualTo("0\talpha\tPOINT (1 2)" + System.lineSeparator() + "1\tbeta\tPOINT (3 4)");
   }
 
   @Test
@@ -167,8 +163,7 @@ class GeometryInspectorSwtViewerPopupStateTest {
   private GeometryInspectorFeatureTableModel testModel() {
     return testModel(
         List.<Object[]>of(
-            new Object[] {"alpha", "POINT (1 2)"},
-            new Object[] {"beta", "POINT (3 4)"}));
+            new Object[] {"alpha", "POINT (1 2)"}, new Object[] {"beta", "POINT (3 4)"}));
   }
 
   private GeometryInspectorFeatureTableModel testModel(List<Object[]> rows) {
@@ -176,20 +171,12 @@ class GeometryInspectorSwtViewerPopupStateTest {
     rowMeta.addValueMeta(new ValueMetaString("name"));
     rowMeta.addValueMeta(new ValueMetaString("geom_wkt"));
     GeometryBuildResult buildResult = featureBuilder.build(rowMeta, rows, "geom_wkt");
-    return new GeometryInspectorFeatureTableModel(samplingResult(rows, rowMeta), buildResult, "geom_wkt");
+    return new GeometryInspectorFeatureTableModel(
+        samplingResult(rows, rowMeta), buildResult, "geom_wkt");
   }
 
   private SamplingResult samplingResult(List<Object[]> rows, RowMeta rowMeta) {
-    SamplingResult samplingResult =
-        new SamplingResult(
-            rows,
-            rowMeta,
-            false,
-            "",
-            GeometryInspectionSide.AUTO,
-            GeometryInspectionSide.OUTPUT,
-            false,
-            "");
+    SamplingResult samplingResult = new SamplingResult(rows, rowMeta, false, "", "OUTPUT MAIN");
     return samplingResult;
   }
 }

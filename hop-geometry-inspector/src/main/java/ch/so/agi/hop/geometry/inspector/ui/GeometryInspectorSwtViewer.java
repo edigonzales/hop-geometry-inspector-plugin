@@ -4,7 +4,6 @@ import ch.so.agi.hop.geometry.inspector.GeometryFeatureBuilder;
 import ch.so.agi.hop.geometry.inspector.GeometryInspectorClassLoaderSupport;
 import ch.so.agi.hop.geometry.inspector.GeometrySelectionService;
 import ch.so.agi.hop.geometry.inspector.model.GeometryBuildResult;
-import ch.so.agi.hop.geometry.inspector.model.GeometryInspectionSide;
 import ch.so.agi.hop.geometry.inspector.model.GeometryInspectorBackgroundMapConfig;
 import ch.so.agi.hop.geometry.inspector.model.SamplingResult;
 import java.awt.Color;
@@ -167,7 +166,6 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
   private record RenderLayer(GeometryBuildResult build, Color color, double opacity) {}
 
   private static final class ResultLayer {
-    final java.util.UUID id = java.util.UUID.randomUUID();
     final SamplingResult sample;
     final List<String> fields;
     String field, label;
@@ -192,18 +190,16 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
     }
   }
 
-  private final List<AutoCloseable> ownedStores = new ArrayList<>();
-
-  public void own(AutoCloseable resource) {
-    ownedStores.add(resource);
-  }
-
   public void setActiveResultLabel(String label) {
     activeLayer.label = label;
     refreshLayers();
   }
 
   private boolean replaceNextResult;
+
+  public void addDisposeListener(org.eclipse.swt.events.DisposeListener listener) {
+    shell.addDisposeListener(listener);
+  }
 
   public void disposeWindow() {
     if (!shell.isDisposed()) shell.dispose();
@@ -218,9 +214,8 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
       List<String> fields,
       String field,
       GeometryBuildResult build,
-      String label,
-      boolean replace) {
-    if ((replace || replaceNextResult) && activeLayer != null) releaseLayer(activeLayer);
+      String label) {
+    if (replaceNextResult && activeLayer != null) releaseLayer(activeLayer);
 
     Color[] palette = {
       new Color(45, 100, 190),
@@ -243,12 +238,15 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
 
   private void releaseLayer(ResultLayer layer) {
     resultLayers.remove(layer);
+    closeLayer(layer);
+  }
+
+  private void closeLayer(ResultLayer layer) {
     if (layer.sample.rows() instanceof ch.so.agi.hop.geometry.inspector.data.StoreRowList stored) {
-      ownedStores.remove(stored.store());
       try {
         stored.store().close();
       } catch (Exception e) {
-        showWarning("Unable to close result", e.getMessage());
+        System.err.println("Unable to close inspector result: " + e.getMessage());
       }
     }
   }
@@ -915,7 +913,7 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
             var completedIndex = index;
             shell
                 .getDisplay()
-                .asyncExec(
+                .syncExec(
                     () -> {
                       if (shell.isDisposed() || generation != queryGeneration) {
                         closeQuery(completedIndex);
@@ -2340,11 +2338,7 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
 
   private String buildStatusText() {
     StringBuilder status = new StringBuilder();
-    status.append("source=").append(describeEffectiveSide());
-    if (samplingResult.autoSwitched()) {
-      status.append(" (auto-switched)");
-    }
-    status.append(" | sampled rows=").append(samplingResult.rows().size());
+    status.append("rows=").append(samplingResult.rows().size());
     status
         .append(" | parsed features=")
         .append(currentBuildResult == null ? 0 : currentBuildResult.features().size());
@@ -2354,12 +2348,9 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
     status
         .append(" | null/empty=")
         .append(currentBuildResult == null ? 0 : currentBuildResult.nullGeometries());
-    status.append(" | sample=").append(samplingResult.partial() ? "partial" : "full");
+    status.append(" | capture=").append(samplingResult.partial() ? "partial" : "complete");
     if (samplingResult.reason() != null && !samplingResult.reason().isBlank()) {
       status.append(" (").append(samplingResult.reason()).append(')');
-    }
-    if (!samplingResult.sideResolutionMessage().isBlank()) {
-      status.append(" | ").append(samplingResult.sideResolutionMessage());
     }
     if (currentBuildResult != null && !currentBuildResult.crsStatusMessage().isBlank()) {
       status.append(" | crs=").append(currentBuildResult.crsStatusMessage());
@@ -2397,22 +2388,7 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
   }
 
   private String buildInspectionSourceLabel() {
-    StringBuilder label = new StringBuilder("Inspecting ");
-    label.append(describeEffectiveSide());
-    if (samplingResult.autoSwitched()) {
-      label.append(" (auto-switched)");
-    }
-    return label.toString();
-  }
-
-  private String describeEffectiveSide() {
-    GeometryInspectionSide effectiveSide = samplingResult.effectiveSide();
-    if (effectiveSide == null) {
-      return samplingResult.requestedSide() == null
-          ? "unresolved rows"
-          : samplingResult.requestedSide().rowsLabel();
-    }
-    return effectiveSide.rowsLabel();
+    return "Inspecting " + samplingResult.streamLabel();
   }
 
   private String abbreviate(String value, int maxLength) {
@@ -2454,13 +2430,8 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
     validationWorker.shutdownNow();
     closeQuery(queryIndex);
     backgroundMapClient.close();
-    for (var resource : ownedStores)
-      try {
-        resource.close();
-      } catch (Exception e) {
-        System.err.println("Unable to close inspector result: " + e.getMessage());
-      }
-    ownedStores.clear();
+    resultLayers.forEach(this::closeLayer);
+    resultLayers.clear();
     replaceOverlayFrame(null);
     setBackgroundFrame(null);
     backgroundFrameCache.clear();

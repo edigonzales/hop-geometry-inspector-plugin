@@ -1,5 +1,5 @@
 = Data Inspector Plugin
-:description: Inspect Apache Hop rows, geometry layers and cached pipeline results.
+:description: Inspect Apache Hop rows and compare geometry layers.
 
 The Data Inspector is a desktop GUI plugin for Apache Hop.
 

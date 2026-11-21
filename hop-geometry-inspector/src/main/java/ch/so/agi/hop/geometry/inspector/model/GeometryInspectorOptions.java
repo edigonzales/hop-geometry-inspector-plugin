@@ -10,8 +10,8 @@ public record GeometryInspectorOptions(
     Duration timeout) {
 
   public GeometryInspectorOptions {
-    if (sampleSize <= 0) {
-      throw new IllegalArgumentException("sampleSize must be > 0");
+    if (sampleSize < 0) {
+      throw new IllegalArgumentException("sampleSize must be >= 0");
     }
     if (mode == null) {
       throw new IllegalArgumentException("mode must not be null");
@@ -23,5 +23,9 @@ public record GeometryInspectorOptions(
     if (timeout == null || timeout.isNegative() || timeout.isZero()) {
       throw new IllegalArgumentException("timeout must be > 0");
     }
+  }
+
+  public boolean allRows() {
+    return sampleSize == 0;
   }
 }

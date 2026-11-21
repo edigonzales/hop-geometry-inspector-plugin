@@ -3,19 +3,21 @@
 
 == Responsibilities
 
-`CaptureService` clones/prunes pipelines and wraps the original Hop row handlers. `StreamDescriptor`
-identifies direction, peer, output kind and transform copy. `InspectionResult` keeps stream provenance,
-capture generation and completeness separate from its `RowStore`.
+`CaptureService` clones the pipeline, retains the required upstream graph and uses dummy sinks
+for outgoing hops beyond the inspection boundary. It observes rows through Hop's original row
+handlers. `StreamDescriptor` identifies the direction, peer, output kind and transform copy.
+`InspectionResult` records provenance, capture time and completion with its `RowStore`.
 
-`MemoryRowStore` owns samples. `DiskRowStore` stores Hop schema metadata, 8 MiB binary row blocks, per-row CRCs and a disk offset
-index. `CacheRepository` manages manifests, reader leases, budgets and cleanup. `QueryIndex` uses
-bounded chunks and two-way external merges, with capture ordinal as the stable tie-breaker.
+`MemoryRowStore` holds bounded samples. `DiskRowStore` keeps the Hop schema in memory and
+serializes rows directly to a temporary file with a fixed-width offset index. Capture writes
+synchronously on Hop transform threads. The process-wide limit counts serialized rows and offsets.
+Each successful disk store belongs to one result layer and is deleted when that layer closes.
+A failed or cancelled capture releases its stores before returning to the GUI.
 
-Capture fingerprints are computed for disk recordings, once per recorded transform. Replay
-checks the configuration fingerprint, schema and row integrity of the selected boundary cache.
-`ReplayPlanner` validates the graph and capture generation before preparing an engine. Internal
-`ReplaySourceMeta` instances are only placed in the execution clone and are never saved into the
-user pipeline. The original upstream source is not initialized when replaced by a cache source.
+The SWT virtual table reads rows by ordinal. `QueryIndex` sorts runs of at most 4,096 ordinals
+and merges them with two input cursors. Selection uses the source ordinal to find the active row
+after sorting and filtering. The map retains at most 50,000 matching geometries per layer and
+can display the selected geometry separately.
 
 The existing Geometry Type shared classloader remains the owner of Geometry/JTS and the common
 GeoTools/Imagen/ImageIO-Ext/UOM runtime. Inspector workers use the plugin context classloader,
@@ -27,9 +29,9 @@ Follow `AGENTS.md` for the exact Geometry dependency, Maven settings and JDK set
 Run `mvn clean verify`, `python3 scripts/verify-package.py` and the installed classloader test against
 the built Inspector/Geometry ZIPs. Compatibility tests use JDK 25. Linux SWT tests require Xvfb.
 
-Unit/integration tests cover typed rows, disk queries, capture routing and replay source replacement.
-Installed-plugin tests validate runtime classloader identity and serialization through packaged JARs.
-User examples use standard Hop transforms; test fixtures and expected data live under `e2e/`.
+Capture tests cover bounded samples, stream routing, full temporary storage and cleanup.
+Installed-plugin tests validate runtime classloader identity and typed Geometry serialization.
+The installed examples compare inspection results with the same pipelines run directly by Hop.
 
 == Documentation
 
@@ -50,9 +52,5 @@ select the null and malformed rows, sort by id and change the geometry field. De
 must follow the selected row. Add the Comparison result from the layer example, change
 visibility/order/opacity and pick overlapping geometry. Try an unavailable background
 URL and verify that rows remain selectable. Close the pipeline editor and confirm its
-Inspector workspace closes. Reopen a full cache after restarting Hop and compare the
-results of the linear and two-input replay examples.
-
-Disk writes apply backpressure on the background capture threads rather than queueing
-unbounded rows. Query runs contain at most 4096 ordinals; external merges use two input
-cursors. Each row has an integrity checksum checked during reads and replay preflight.
+Inspector workspace closes. Repeat with *All rows (temporary)* and remove a result to
+verify that its temporary files are released.

@@ -18,9 +18,11 @@ public final class StreamSelectionDialog {
     shell.setLayout(new GridLayout(2, false));
     Label info = new Label(shell, SWT.WRAP);
     info.setText(
-        "Select streams from this pipeline. Each stream is kept separately.\n"
-            + "Main captures putRow; target captures explicit routing to that destination.");
-    info.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false, 2, 1));
+        "Each selected stream becomes a result layer. Capture runs the selected transforms and"
+            + " their upstream dependencies again. This can repeat side effects such as writes.");
+    var infoLayout = new GridData(SWT.FILL, SWT.CENTER, true, false, 2, 1);
+    infoLayout.widthHint = 680;
+    info.setLayoutData(infoLayout);
     Table table = new Table(shell, SWT.CHECK | SWT.BORDER | SWT.V_SCROLL);
     GridData data = new GridData(SWT.FILL, SWT.FILL, true, true, 2, 1);
     data.widthHint = 680;
@@ -50,6 +52,7 @@ public final class StreamSelectionDialog {
     Button cancel = new Button(shell, SWT.PUSH);
     cancel.setText("Cancel");
     cancel.addListener(SWT.Selection, e -> shell.dispose());
+    shell.setDefaultButton(ok);
     shell.pack();
     shell.open();
     while (!shell.isDisposed()) {
