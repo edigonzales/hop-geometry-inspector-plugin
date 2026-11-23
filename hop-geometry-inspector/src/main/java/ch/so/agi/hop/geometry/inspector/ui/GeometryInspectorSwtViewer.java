@@ -68,13 +68,10 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
   private static final long BACKGROUND_DEBOUNCE_MILLIS = 220L;
   private static final int BACKGROUND_CACHE_SIZE = 8;
   private static final float POINT_FILL_OPACITY = 1.0f;
-  private static final float DEFAULT_POINT_SIZE = 11.0f;
   private static final float EMPHASIZED_POINT_SIZE = 22.0f;
   private static final float HIGHLIGHT_POINT_SIZE = 24.0f;
-  private static final float DEFAULT_LINE_WIDTH = 2.2f;
   private static final float EMPHASIZED_LINE_WIDTH = 4.5f;
   private static final float HIGHLIGHT_LINE_WIDTH = 5.5f;
-  private static final float DEFAULT_POLYGON_STROKE_WIDTH = 2.2f;
   private static final float EMPHASIZED_POLYGON_STROKE_WIDTH = 4.5f;
 
   private enum ViewportRefreshMode {
@@ -1260,6 +1257,9 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
     MapContent mapContent = new MapContent();
     try {
       mapContent.setTitle("Geometry sample overlay");
+      float pointSize = emphasizeSmallFeatures ? EMPHASIZED_POINT_SIZE : 7;
+      float lineWidth = emphasizeSmallFeatures ? EMPHASIZED_LINE_WIDTH : 2;
+      float polygonStrokeWidth = emphasizeSmallFeatures ? EMPHASIZED_POLYGON_STROKE_WIDTH : 1;
       for (RenderLayer layer : layers) {
         var sb = new StyleBuilder();
         for (var family : List.of("point", "line", "polygon")) {
@@ -1276,14 +1276,14 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
           Style style =
               family.equals("point")
                   ? SLD.createPointStyle(
-                      "circle", layer.color(), layer.color(), (float) layer.opacity(), 7)
+                      "circle", layer.color(), layer.color(), (float) layer.opacity(), pointSize)
                   : family.equals("line")
                       ? sb.createStyle(
                           sb.createLineSymbolizer(
-                              sb.createStroke(layer.color(), 2, layer.opacity())))
+                              sb.createStroke(layer.color(), lineWidth, layer.opacity())))
                       : sb.createStyle(
                           sb.createPolygonSymbolizer(
-                              sb.createStroke(layer.color(), 1, layer.opacity()),
+                              sb.createStroke(layer.color(), polygonStrokeWidth, layer.opacity()),
                               sb.createFill(layer.color(), layer.opacity())));
           addLayerIfNotEmpty(mapContent, features, layer.build().featureType(), style, family);
         }
@@ -1312,52 +1312,6 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
         renderArea, logicalWidth, logicalHeight, deviceZoom, revision, image);
   }
 
-  private void addFeatureLayers(
-      List<SimpleFeature> features,
-      SimpleFeatureType featureType,
-      MapContent targetMapContent,
-      boolean emphasizeSmallFeatures) {
-    List<SimpleFeature> pointFeatures = new ArrayList<>();
-    List<SimpleFeature> lineFeatures = new ArrayList<>();
-    List<SimpleFeature> polygonFeatures = new ArrayList<>();
-
-    for (SimpleFeature feature : features) {
-      Object defaultGeometry = feature.getDefaultGeometry();
-      if (!(defaultGeometry instanceof Geometry geometry)) {
-        continue;
-      }
-
-      if (geometry instanceof Puntal) {
-        pointFeatures.add(feature);
-      } else if (geometry instanceof Lineal) {
-        lineFeatures.add(feature);
-      } else if (geometry instanceof Polygonal) {
-        polygonFeatures.add(feature);
-      } else {
-        polygonFeatures.add(feature);
-      }
-    }
-
-    addLayerIfNotEmpty(
-        targetMapContent,
-        polygonFeatures,
-        featureType,
-        createPolygonStyle(emphasizeSmallFeatures),
-        "Polygons");
-    addLayerIfNotEmpty(
-        targetMapContent,
-        lineFeatures,
-        featureType,
-        createLineStyle(emphasizeSmallFeatures),
-        "Lines");
-    addLayerIfNotEmpty(
-        targetMapContent,
-        pointFeatures,
-        featureType,
-        createPointStyle(emphasizeSmallFeatures),
-        "Points");
-  }
-
   private void addLayerIfNotEmpty(
       MapContent targetMapContent,
       List<SimpleFeature> features,
@@ -1370,33 +1324,6 @@ public final class GeometryInspectorSwtViewer implements AutoCloseable {
     Layer layer = new FeatureLayer(new ListFeatureCollection(featureType, features), style, title);
     layer.setTitle(title);
     targetMapContent.addLayer(layer);
-  }
-
-  static Style createPointStyle(boolean emphasizeSmallFeatures) {
-    return SLD.createPointStyle(
-        "circle",
-        new Color(215, 48, 39),
-        Color.BLACK,
-        POINT_FILL_OPACITY,
-        emphasizeSmallFeatures ? EMPHASIZED_POINT_SIZE : DEFAULT_POINT_SIZE);
-  }
-
-  static Style createLineStyle(boolean emphasizeSmallFeatures) {
-    return SLD.createLineStyle(
-        new Color(69, 117, 180),
-        emphasizeSmallFeatures ? EMPHASIZED_LINE_WIDTH : DEFAULT_LINE_WIDTH);
-  }
-
-  static Style createPolygonStyle(boolean emphasizeSmallFeatures) {
-    StyleBuilder styleBuilder = new StyleBuilder();
-    return styleBuilder.createStyle(
-        styleBuilder.createPolygonSymbolizer(
-            styleBuilder.createStroke(
-                new Color(49, 54, 149),
-                emphasizeSmallFeatures
-                    ? EMPHASIZED_POLYGON_STROKE_WIDTH
-                    : DEFAULT_POLYGON_STROKE_WIDTH),
-            styleBuilder.createFill(new Color(253, 174, 97), 0.48d)));
   }
 
   static Style createHighlightStyle(Geometry geometry) {

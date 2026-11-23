@@ -1,6 +1,6 @@
 package ch.so.agi.hop.geometry.inspector.parsing;
 
-import com.atolcd.hop.core.row.value.GeometryInterface;
+import com.atolcd.hop.core.row.value.ValueMetaGeometry;
 import com.atolcd.hop.gis.geometry.curve.CurveGeometrySupport;
 import java.util.Locale;
 import org.apache.hop.core.row.IValueMeta;
@@ -23,9 +23,11 @@ public class GeometryParser {
       return normalizeGeometry(geometry);
     }
 
-    Geometry geometryFromMeta = parseViaGeometryInterface(valueMeta, value);
-    if (geometryFromMeta != null) {
-      return normalizeGeometry(geometryFromMeta);
+    if (valueMeta instanceof ValueMetaGeometry geometryMeta) {
+      Geometry geometryFromMeta = geometryMeta.getGeometry(value);
+      if (geometryFromMeta != null) {
+        return normalizeGeometry(geometryFromMeta);
+      }
     }
 
     if (value instanceof byte[] bytes) {
@@ -46,13 +48,6 @@ public class GeometryParser {
     }
 
     throw new ParseException("Unsupported geometry value type: " + value.getClass().getName());
-  }
-
-  private Geometry parseViaGeometryInterface(IValueMeta valueMeta, Object value) throws Exception {
-    if (!(valueMeta instanceof GeometryInterface geometryMeta)) {
-      return null;
-    }
-    return geometryMeta.getGeometry(value);
   }
 
   private Geometry parseViaValueMetaString(IValueMeta valueMeta, Object value) throws Exception {

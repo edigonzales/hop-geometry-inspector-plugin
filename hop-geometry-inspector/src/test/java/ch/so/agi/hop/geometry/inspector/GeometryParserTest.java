@@ -3,20 +3,16 @@ package ch.so.agi.hop.geometry.inspector;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.so.agi.hop.geometry.inspector.parsing.GeometryParser;
-import com.atolcd.hop.core.row.value.GeometryInterface;
+import com.atolcd.hop.core.row.value.ValueMetaGeometry;
 import com.atolcd.hop.gis.geometry.curve.CircularString;
 import com.atolcd.hop.gis.geometry.curve.CompoundCurve;
 import com.atolcd.hop.gis.geometry.curve.CurveGeometrySupport;
 import com.atolcd.hop.gis.geometry.curve.CurvePolygon;
 import com.atolcd.hop.gis.geometry.curve.MultiCurve;
 import com.atolcd.hop.gis.geometry.curve.MultiSurface;
-import java.sql.ResultSetMetaData;
 import java.util.List;
-import org.apache.hop.core.database.DatabaseMeta;
-import org.apache.hop.core.exception.HopDatabaseException;
 import org.apache.hop.core.row.IValueMeta;
 import org.apache.hop.core.row.value.ValueMetaString;
-import org.apache.hop.core.variables.IVariables;
 import org.junit.jupiter.api.Test;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Geometry;
@@ -114,12 +110,14 @@ class GeometryParserTest {
   }
 
   @Test
-  void parsesViaSharedGeometryInterfaceWithoutReflection() throws Exception {
+  void resolvesIndexedValueViaSharedGeometryMeta() throws Exception {
     Geometry source = new GeometryFactory().createPoint(new Coordinate(9, 10));
     source.setSRID(21781);
-    GeometryInterfaceMeta valueMeta = new GeometryInterfaceMeta(source);
+    ValueMetaGeometry valueMeta = new ValueMetaGeometry("geom");
+    valueMeta.setStorageType(IValueMeta.STORAGE_TYPE_INDEXED);
+    valueMeta.setIndex(new Object[] {source});
 
-    Geometry parsed = parser.parseGeometry(valueMeta, new Object());
+    Geometry parsed = parser.parseGeometry(valueMeta, 0);
 
     assertThat(parsed).isSameAs(source);
     assertThat(parsed.getSRID()).isEqualTo(21781);
@@ -169,33 +167,5 @@ class GeometryParserTest {
       builder.append(String.format("%02x", value));
     }
     return builder.toString();
-  }
-
-  private static final class GeometryInterfaceMeta extends ValueMetaString
-      implements GeometryInterface {
-    private final Geometry geometry;
-
-    private GeometryInterfaceMeta(Geometry geometry) {
-      super("geom");
-      this.geometry = geometry;
-    }
-
-    @Override
-    public Geometry getGeometry(Object object) {
-      return geometry;
-    }
-
-    @Override
-    public IValueMeta getValueFromSqlType(
-        IVariables variables,
-        DatabaseMeta databaseMeta,
-        String name,
-        ResultSetMetaData resultSetMetaData,
-        int index,
-        boolean ignoreLength,
-        boolean lazyConversion)
-        throws HopDatabaseException {
-      return null;
-    }
   }
 }
