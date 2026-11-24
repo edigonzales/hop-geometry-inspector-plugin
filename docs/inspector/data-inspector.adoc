@@ -113,7 +113,8 @@ Further inspections in the same pipeline editor add layers to the existing works
 Toolbar icons are represented by text above: *Extent* means *Zoom to extent*,
 *Refresh* means *Refresh geometry view*, *Emphasize* means *Emphasize small features*,
 and *Background* means *Toggle background map*. Layer labels and the status line
-are abbreviated. Selecting a row fills the attribute table and geometry text.
+are abbreviated. *Emphasize small features* enlarges point symbols and thickens
+lines and polygon outlines. Selecting a row fills the attribute table and geometry text.
 
 === Table, filters and details
 

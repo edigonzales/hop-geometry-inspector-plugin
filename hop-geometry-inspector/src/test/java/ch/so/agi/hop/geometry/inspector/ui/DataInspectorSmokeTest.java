@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.so.agi.hop.geometry.inspector.GeometryFeatureBuilder;
 import ch.so.agi.hop.geometry.inspector.model.*;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
@@ -206,6 +207,102 @@ class DataInspectorSmokeTest {
       parent.dispose();
       if (owns) display.dispose();
     }
+  }
+
+  @Test
+  void toolbarEmphasizesRenderedGeometriesAndZooms() throws Exception {
+    Display display = Display.getCurrent();
+    boolean owns = display == null;
+    if (owns) display = new Display();
+    Shell parent = new Shell(display);
+    var meta = new RowMeta();
+    meta.addValueMeta(new ValueMetaString("geometry"));
+    var sample =
+        new SamplingResult(
+            List.of(
+                new Object[] {"POINT (1 5)"},
+                new Object[] {"LINESTRING (5 4, 5 6)"},
+                new Object[] {"POLYGON ((8 4, 9 4, 9 6, 8 6, 8 4))"}),
+            meta,
+            false,
+            "Complete",
+            "OUTPUT MAIN");
+    var builder = new GeometryFeatureBuilder();
+    GeometryInspectorSwtViewer viewer = null;
+    try {
+      viewer =
+          new GeometryInspectorSwtViewer(
+              parent,
+              sample,
+              builder,
+              List.of("geometry"),
+              "geometry",
+              builder.build(meta, sample.rows(), "geometry"),
+              GeometryInspectorBackgroundMapConfig.empty());
+      viewer.open();
+      var toggle = (GeometryInspectorToolbarButton) field(viewer, "emphasizeSmallFeaturesToggle");
+      var normal = awaitOverlay(display, viewer, null);
+      int[] normalPixels = renderedPixels(normal);
+
+      click(toggle);
+      assertThat(toggle.isSelected()).isTrue();
+      var emphasized = awaitOverlay(display, viewer, normal);
+      int[] emphasizedPixels = renderedPixels(emphasized);
+      for (int family = 0; family < normalPixels.length; family++) {
+        assertThat(normalPixels[family]).isPositive();
+        assertThat(emphasizedPixels[family]).isGreaterThan(normalPixels[family]);
+      }
+
+      click(toggle);
+      assertThat(toggle.isSelected()).isFalse();
+      var restored = awaitOverlay(display, viewer, emphasized);
+      assertThat(renderedPixels(restored)).containsExactly(normalPixels);
+
+      click((GeometryInspectorToolbarButton) field(viewer, "zoomInButton"));
+      var zoomed = awaitOverlay(display, viewer, restored);
+      assertThat(zoomed.displayArea().getWidth()).isLessThan(restored.displayArea().getWidth());
+      assertThat(renderedPixels(zoomed)[1]).isGreaterThan(normalPixels[1]);
+    } finally {
+      if (viewer != null) viewer.disposeWindow();
+      parent.dispose();
+      if (owns) display.dispose();
+    }
+  }
+
+  private GeometryInspectorFrame awaitOverlay(
+      Display display, GeometryInspectorSwtViewer viewer, GeometryInspectorFrame previous)
+      throws Exception {
+    long deadline = System.nanoTime() + Duration.ofSeconds(8).toNanos();
+    while (System.nanoTime() < deadline) {
+      if (!display.readAndDispatch()) Thread.sleep(5);
+      var frame = (GeometryInspectorFrame) field(viewer, "overlayFrame");
+      if (frame != null && frame != previous && field(viewer, "overlayStatus").equals("idle")) {
+        return frame;
+      }
+    }
+    throw new AssertionError("No new map overlay, status " + field(viewer, "overlayStatus"));
+  }
+
+  private static void click(GeometryInspectorToolbarButton button) {
+    var event = new Event();
+    event.button = 1;
+    event.x = 5;
+    event.y = 5;
+    button.notifyListeners(SWT.MouseDown, event);
+    button.notifyListeners(SWT.MouseUp, event);
+  }
+
+  private static int[] renderedPixels(GeometryInspectorFrame frame) {
+    var image = frame.image().getImageData();
+    int[] pixels = new int[3];
+    for (int y = 0; y < image.height; y++) {
+      for (int x = 0; x < image.width; x++) {
+        if (image.getAlpha(x, y) > 0) {
+          pixels[3 * x / image.width]++;
+        }
+      }
+    }
+    return pixels;
   }
 
   private Object field(Object value, String name) throws Exception {
